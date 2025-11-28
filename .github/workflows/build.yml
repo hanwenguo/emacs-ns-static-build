@@ -39,116 +39,116 @@ jobs:
         run: |
           curl -O https://distfiles.ariadne.space/pkgconf/pkgconf-2.5.1.tar.gz
           tar -zxf pkgconf-2.5.1.tar.gz && cd pkgconf-2.5.1
-          ./configure && make -j4
+          ./configure --disable-shared && make -j4
           sudo make install
           sudo ln -s /usr/local/bin/pkgconf /usr/local/bin/pkg-config
       - name: Install GNU Libtool
         run: |
           curl -O https://ftp.gnu.org/gnu/libtool/libtool-2.5.4.tar.gz
           tar -zxf libtool-2.5.4.tar.gz && cd libtool-2.5.4
-          ./configure && make -j4
+          ./configure --disable-shared && make -j4
           sudo make install
       - name: Install GNU Texinfo
         run: |
           curl -O https://ftp.gnu.org/gnu/texinfo/texinfo-7.2.tar.gz
           tar -zxf texinfo-7.2.tar.gz && cd texinfo-7.2
-          ./configure && make -j4
+          ./configure --disable-shared && make -j4
           sudo make install
       - name: Install GNU Libunistring
         run: |
           curl -O https://ftp.gnu.org/gnu/libunistring/libunistring-1.4.1.tar.gz
           tar -zxf libunistring-1.4.1.tar.gz && cd libunistring-1.4.1
-          ./configure && make -j4
+          ./configure --disable-shared && make -j4
           sudo make install
       - name: Install GNU Libiconv
         run: |
           curl -O https://ftp.gnu.org/gnu/libiconv/libiconv-1.18.tar.gz
           tar -zxf libiconv-1.18.tar.gz && cd libiconv-1.18
-          ./configure && make -j4
+          ./configure --disable-shared && make -j4
           sudo make install
       - name: Install GNU Gettext
         run: |
           curl -O https://ftp.gnu.org/gnu/gettext/gettext-0.26.tar.gz
           tar -zxf gettext-0.26.tar.gz && cd gettext-0.26
-          ./configure && make -j4
+          ./configure --disable-shared && make -j4
           sudo make install
       - name: Install GNU Ncurses
         run: |
           curl -O https://ftp.gnu.org/gnu/ncurses/ncurses-6.5.tar.gz
           tar -zxf ncurses-6.5.tar.gz && cd ncurses-6.5
-          ./configure && make -j4
+          ./configure --disable-shared && make -j4
           sudo make install
       - name: Install Zlib
         run: |
           curl -O https://www.zlib.net/zlib-1.3.1.tar.gz
           tar -zxf zlib-1.3.1.tar.gz && cd zlib-1.3.1
-          ./configure && make -j4
+          ./configure --disable-shared && make -j4
           sudo make install
       - name: Install Libxml2
         run: |
           curl -O https://download.gnome.org/sources/libxml2/2.9/libxml2-2.9.9.tar.xz
           tar -Jxf libxml2-2.9.9.tar.xz && cd libxml2-2.9.9
-          ./configure && make -j4
+          ./configure --disable-shared && make -j4
           sudo make install
       - name: Install Libffi
         run: |
           curl -LO https://github.com/libffi/libffi/releases/download/v3.5.2/libffi-3.5.2.tar.gz
           tar -Jxf libffi-3.5.2.tar.gz && cd libffi-3.5.2
-          ./configure && make -j4
+          ./configure --disable-shared && make -j4
           sudo make install
       - name: Install OpenSSL
         run: |
           curl -LO https://github.com/openssl/openssl/releases/download/openssl-3.6.0/openssl-3.6.0.tar.gz
           tar -zxf openssl-3.6.0.tar.gz && cd openssl-3.6.0
-          ./config no-asm && make -j4
+          ./config no-asm no-shared && make -j4
           sudo make install
       - name: Install Libexpat
         run: |
           curl -LO https://github.com/libexpat/libexpat/releases/download/R_2_7_3/expat-2.7.3.tar.gz
           tar -zxf expat-2.7.3.tar.gz && cd expat-2.7.3
-          ./configure && make -j4
+          ./configure --disable-shared && make -j4
           sudo make install
       - name: Install GNU Libgmp
         run: |
           curl -O https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.gz
           tar -zxf gmp-6.3.0.tar.gz && cd gmp-6.3.0
-          ./configure && make -j4
+          ./configure --disable-shared && make -j4
           sudo make install
       - name: Install Libnettle
         run: |
           curl -O https://ftp.gnu.org/gnu/nettle/nettle-3.10.2.tar.gz
           tar -zxf nettle-3.10.2.tar.gz && cd nettle-3.10.2
-          ./configure && make -j4
+          ./configure --disable-shared && make -j4
           sudo make install
       - name: Install GNU Libtasn1
         run: |
           curl -O https://ftp.gnu.org/gnu/libtasn1/libtasn1-4.20.0.tar.gz
           tar -zxf libtasn1-4.20.0.tar.gz && cd libtasn1-4.20.0
-          ./configure && make -j4
+          ./configure --disable-shared && make -j4
           sudo make install
       - name: Install P11-kit
         run: |
           curl -LO https://github.com/p11-glue/p11-kit/releases/download/0.25.10/p11-kit-0.25.10.tar.xz
           tar -Jxf p11-kit-0.25.10.tar.xz && cd p11-kit-0.25.10
-          ./configure --without-trust-paths && make -j4
+          ./configure --disable-shared --without-trust-paths && make -j4
           sudo make install
       - name: Install Libidn2
         run: |
           curl -O https://ftp.gnu.org/gnu/libidn/libidn2-2.3.8.tar.gz
           tar -zxf libidn2-2.3.8.tar.gz && cd libidn2-2.3.8
-          ./configure && make -j4
+          ./configure --disable-shared && make -j4
           sudo make install
       - name: Install Libunbound
         run: |
           curl -O https://nlnetlabs.nl/downloads/unbound/unbound-1.24.2.tar.gz
           tar -zxf unbound-1.24.2.tar.gz && cd unbound-1.24.2
-          ./configure && make -j4
+          ./configure --disable-shared && make -j4
           sudo make install
       - name: Install Gnutls
         run: |
           curl -O https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.11.tar.xz
           tar -Jxf gnutls-3.8.11.tar.xz && cd gnutls-3.8.11
-          ./configure && make -j4
+          ./configure --disable-shared && make -j4
           sudo make install
       - name: Install Libtreesitter
         run: |
@@ -158,9 +158,7 @@ jobs:
           sudo make install
       - name: Remove Dynamic Libraries
         run: |
-          sudo mv /usr/local/lib/libpkgconf.7.dylib /usr/local/lib/libpkgconf.7.b
           sudo find /usr/local/lib -name '*.dylib' -delete
-          sudo mv /usr/local/lib/libpkgconf.7.b /usr/local/lib/libpkgconf.7.dylib
       - name: Install Emacs
         run: |
           git clone -b 'feature/igc' --depth 1 https://github.com/emacs-mirror/emacs.git
