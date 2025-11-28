@@ -109,7 +109,7 @@ jobs:
         run: |
           curl -LO https://github.com/p11-glue/p11-kit/releases/download/0.25.10/p11-kit-0.25.10.tar.xz
           tar -Jxf p11-kit-0.25.10.tar.xz && cd p11-kit-0.25.10
-          ./configure && make -j4
+          ./configure --without-trust-paths && make -j4
           sudo make install
       - name: Install Libidn2
         run: |
