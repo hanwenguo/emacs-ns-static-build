@@ -158,7 +158,9 @@ jobs:
           sudo make install
       - name: Remove Dynamic Libraries
         run: |
+          sudo mv /usr/local/lib/libpkgconf.7.dylib /usr/local/lib/libpkgconf.7.b
           sudo find /usr/local/lib -name '*.dylib' -delete
+          sudo mv /usr/local/lib/libpkgconf.7.b /usr/local/lib/libpkgconf.7.dylib
       - name: Install Emacs
         run: |
           git clone -b 'feature/igc' --depth 1 https://github.com/emacs-mirror/emacs.git
