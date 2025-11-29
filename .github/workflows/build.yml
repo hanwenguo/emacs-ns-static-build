@@ -125,19 +125,21 @@ jobs:
         run: |
           git clone -b 'feature/igc' --depth 1 https://github.com/emacs-mirror/emacs.git
           cd emacs && ./autogen.sh
-          ./configure CPPFLAGS='-I/usr/local/include' LDFLAGS='-L/usr/local/lib' \
-                      --disable-gc-mark-trace                                    \
-                      --without-all                                              \
-                      --with-gmp                                                 \
-                      --with-gnutls                                              \
-                      --with-modules                                             \
-                      --with-mps                                                 \
-                      --with-native-image-api                                    \
-                      --with-ns                                                  \
-                      --with-small-ja-dic                                        \
-                      --with-toolkit-scroll-bars                                 \
-                      --with-tree-sitter                                         \
-                      --with-xml2                                                \
+          ./configure CPPFLAGS='-I/usr/local/include'  \
+                      LDFLAGS='-L/usr/local/lib'       \
+                      PKG_CONFIG='pkg-config --static' \
+                      --disable-gc-mark-trace          \
+                      --without-all                    \
+                      --with-gmp                       \
+                      --with-gnutls                    \
+                      --with-modules                   \
+                      --with-mps                       \
+                      --with-native-image-api          \
+                      --with-ns                        \
+                      --with-small-ja-dic              \
+                      --with-toolkit-scroll-bars       \
+                      --with-tree-sitter               \
+                      --with-xml2                      \
                       --with-zlib
           make -j4 && make install
           ditto nextstep/Emacs.app Emacs.app
