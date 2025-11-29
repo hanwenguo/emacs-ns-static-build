@@ -140,7 +140,6 @@ jobs:
                       --with-toolkit-scroll-bars                                 \
                       --with-tree-sitter                                         \
                       --with-xml2                                                \
-                      --with-xwidgets                                            \
                       --with-zlib
           make -j4 && make install
           tar -Jcf emacs-igc-static-mach-arm64.tar.xz nextstep/Emacs.app
