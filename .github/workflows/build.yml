@@ -194,6 +194,12 @@ jobs:
                                       --with-zlib
           make -j4 && make install
           ditto nextstep/Emacs.app Emacs.app
+          mkdir -p Emacs.app/Contents/MacOS/bin
+          cat > Emacs.app/Contents/MacOS/bin/emacs << 'EOF'
+          #!/bin/bash
+          exec /Applications/Emacs.app/Contents/MacOS/Emacs "$@"
+          EOF
+          chmod +x Emacs.app/Contents/MacOS/bin/emacs
           echo version=$(Emacs.app/Contents/MacOS/Emacs --version | sed -nE 's/^GNU Emacs ([0-9.]+).*/\1/p') >> $GITHUB_ENV
           tar -Jcf Emacs.tar.xz Emacs.app
       - name: Create Release
