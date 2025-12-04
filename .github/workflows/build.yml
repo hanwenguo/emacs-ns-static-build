@@ -3,10 +3,42 @@ name: MacOS Build for GNU Emacs
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: "0 0,12 * * *"
+
+permissions:
+  contents: write
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check_release.outputs.should_build }}
+      commit_hash: ${{ steps.get_commit.outputs.commit_hash }}
+      short_hash: ${{ steps.get_commit.outputs.short_hash }}
+    steps:
+      - name: Get latest commit hash
+        id: get_commit
+        run: |
+          COMMIT_HASH=$(git ls-remote https://github.com/emacs-mirror/emacs.git refs/heads/feature/igc | cut -f1)
+          echo "commit_hash=${COMMIT_HASH}" >> $GITHUB_OUTPUT
+          echo "short_hash=${COMMIT_HASH:0:7}" >> $GITHUB_OUTPUT
+          echo "Latest commit: ${COMMIT_HASH}"
+      - name: Check if release exists
+        id: check_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "igc-${{ steps.get_commit.outputs.short_hash }}" --repo ${{ github.repository }} > /dev/null 2>&1; then
+            echo "Release already exists for commit ${{ steps.get_commit.outputs.short_hash }}"
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          else
+            echo "No release found for commit ${{ steps.get_commit.outputs.short_hash }}, will build"
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          fi
+
   build:
+    needs: check
+    if: needs.check.outputs.should_build == 'true'
     runs-on: macos-15
     steps:
       - name: Uninstall Homebrew
@@ -138,6 +170,10 @@ jobs:
         run: |
           git clone -b 'feature/igc' --depth 1 https://github.com/emacs-mirror/emacs.git
           cd emacs && sed -i '' '/darwin/ s/lncurses/lncursesw/g' configure.ac
+          curl -L -O https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/system-appearance.patch
+          curl -L -O https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/round-undecorated-frame.patch
+          patch -f -V none -p1 < system-appearance.patch
+          patch -f -V none -p1 < round-undecorated-frame.patch
           ./autogen.sh && ./configure CFLAGS='-g0 -O2 -flto=thin'      \
                                       PKG_CONFIG='pkg-config -static'  \
                                       --disable-gc-mark-trace          \
@@ -160,7 +196,13 @@ jobs:
           ditto nextstep/Emacs.app Emacs.app
           echo version=$(Emacs.app/Contents/MacOS/Emacs --version | sed -nE 's/^GNU Emacs ([0-9.]+).*/\1/p') >> $GITHUB_ENV
           tar -Jcf Emacs.tar.xz Emacs.app
-      - uses: actions/upload-artifact@v4
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: Emacs-${{ env.version }}
-          path: emacs/Emacs.tar.xz
+          tag_name: igc-${{ needs.check.outputs.short_hash }}
+          name: Emacs ${{ env.version }} (igc-${{ needs.check.outputs.short_hash }})
+          body: |
+            Emacs build from feature/igc branch with the following patches applied:
+            - system-appearance.patch
+            - round-undecorated-frame.patch
+          files: emacs/Emacs.tar.xz
