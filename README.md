@@ -1,7 +1,7 @@
-[![MacOS Build for GNU Emacs](https://github.com/RadioNoiseE/ebuild/actions/workflows/build.yml/badge.svg)](https://github.com/RadioNoiseE/ebuild/actions/workflows/build.yml)
+[![MacOS Build for GNU Emacs](https://github.com/hanwenguo/emacs-ns-static-build/actions/workflows/build.yml/badge.svg)](https://github.com/hanwenguo/emacs-ns-static-build/actions/workflows/build.yml)
 
 This repository automatically builds GNU Emacs with the Memory Pool
-System for Darwin every day at UTC 0:00, directly from upstream git
+System for Darwin when upstream updates, directly from upstream git
 sources. This build is intended for Emacs developers who want to test
 the bleeding-edge version. Please report any bugs directly to the
 Emacs mailing list, as the source is not modified here.
