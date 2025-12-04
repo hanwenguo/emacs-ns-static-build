@@ -196,14 +196,12 @@ jobs:
           echo version=$(Emacs.app/Contents/MacOS/Emacs --version | sed -nE 's/^GNU Emacs ([0-9.]+).*/\1/p') >> $GITHUB_ENV
           tar -Jcf Emacs.tar.xz Emacs.app
       - name: Create Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cd emacs
-          gh release create "igc-${{ needs.check.outputs.short_hash }}" \
-            --repo ${{ github.repository }} \
-            --title "Emacs ${{ env.version }} (igc-${{ needs.check.outputs.short_hash }})" \
-            --notes "Emacs build from feature/igc branch with the following patches applied:
-          - system-appearance.patch
-          - round-undecorated-frame.patch" \
-            Emacs.tar.xz
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: igc-${{ needs.check.outputs.short_hash }}
+          name: Emacs ${{ env.version }} (igc-${{ needs.check.outputs.short_hash }})
+          body: |
+            Emacs build from feature/igc branch with the following patches applied:
+            - system-appearance.patch
+            - round-undecorated-frame.patch
+          files: emacs/Emacs.tar.xz
