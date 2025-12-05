@@ -83,7 +83,7 @@ jobs:
       - name: Install SQLite3
         run: |
           curl -L -O https://www.sqlite.org/2025/sqlite-autoconf-3510100.tar.gz
-          tar -zxf sqlite-autoconf-3490100.tar.gz && cd sqlite-autoconf-3510100
+          tar -zxf sqlite-autoconf-3510100.tar.gz && cd sqlite-autoconf-3510100
           ./configure --disable-shared && make -j4
           sudo make install
       - name: Install GNU Texinfo
