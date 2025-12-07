@@ -194,12 +194,20 @@ jobs:
                                       --with-zlib
           make -j4 && make install
           ditto nextstep/Emacs.app Emacs.app
+          # Create wrapper script to call Emacs binary
           mkdir -p Emacs.app/Contents/MacOS/bin
           cat > Emacs.app/Contents/MacOS/bin/emacs << 'EOF'
           #!/bin/bash
           exec /Applications/Emacs.app/Contents/MacOS/Emacs "$@"
           EOF
           chmod +x Emacs.app/Contents/MacOS/bin/emacs
+          # Replace app icon
+          curl -LO https://github.com/jimeh/emacs-liquid-glass-icons/raw/refs/heads/main/Resources/EmacsLG3-Default.icns
+          mv EmacsLG3-Default.icns Emacs.app/Contents/Resources/Emacs.icns
+          curl -LO https://github.com/jimeh/emacs-liquid-glass-icons/raw/refs/heads/main/Resources/Assets.car
+          mv Assets.car Emacs.app/Contents/Resources/Assets.car
+          plutil -replace CFBundleIconName -string EmacsLG3 Emacs.app/Contents/Info.plist
+          touch Emacs.app
           echo version=$(Emacs.app/Contents/MacOS/Emacs --version | sed -nE 's/^GNU Emacs ([0-9.]+).*/\1/p') >> $GITHUB_ENV
           tar -Jcf Emacs.tar.xz Emacs.app
       - name: Create Release
