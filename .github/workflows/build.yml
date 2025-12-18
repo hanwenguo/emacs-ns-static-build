@@ -166,10 +166,52 @@ jobs:
           tar -zxf gzip-1.14.tar.gz && cd gzip-1.14
           ./configure && make -j4
           sudo make install
-      - name: Install Emacs
+      - name: Build Emacs
         run: |
-          git clone -b 'feature/igc' --depth 1 https://github.com/emacs-mirror/emacs.git
+          git clone --depth 1 https://github.com/emacs-mirror/emacs.git
           cd emacs && sed -i '' '/darwin/ s/lncurses/lncursesw/g' configure.ac
+          curl -L -O https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/system-appearance.patch
+          curl -L -O https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/round-undecorated-frame.patch
+          patch -f -V none -p1 < system-appearance.patch
+          patch -f -V none -p1 < round-undecorated-frame.patch
+          ./autogen.sh && ./configure CFLAGS='-g0 -O2 -flto=thin'      \
+                                      PKG_CONFIG='pkg-config -static'  \
+                                      --disable-gc-mark-trace          \
+                                      --without-all                    \
+                                      --with-compress-install          \
+                                      --with-gmp                       \
+                                      --with-gnutls                    \
+                                      --with-modules                   \
+                                      --with-native-image-api          \
+                                      --with-ns                        \
+                                      --with-small-ja-dic              \
+                                      --with-threads                   \
+                                      --with-toolkit-scroll-bars       \
+                                      --with-tree-sitter               \
+                                      --with-xml2                      \
+                                      --with-zlib
+          make -j4 && make install
+          ditto nextstep/Emacs.app Emacs.app
+          # Create wrapper script to call Emacs binary
+          mkdir -p Emacs.app/Contents/MacOS/bin
+          cat > Emacs.app/Contents/MacOS/bin/emacs << 'EOF'
+          #!/bin/bash
+          exec /Applications/Emacs.app/Contents/MacOS/Emacs "$@"
+          EOF
+          chmod +x Emacs.app/Contents/MacOS/bin/emacs
+          # Replace app icon
+          curl -LO https://github.com/jimeh/emacs-liquid-glass-icons/raw/refs/heads/main/Resources/EmacsLG3-Default.icns
+          mv EmacsLG3-Default.icns Emacs.app/Contents/Resources/Emacs.icns
+          curl -LO https://github.com/jimeh/emacs-liquid-glass-icons/raw/refs/heads/main/Resources/Assets.car
+          mv Assets.car Emacs.app/Contents/Resources/Assets.car
+          plutil -replace CFBundleIconName -string EmacsLG3 Emacs.app/Contents/Info.plist
+          touch Emacs.app
+          echo version=$(Emacs.app/Contents/MacOS/Emacs --version | sed -nE 's/^GNU Emacs ([0-9.]+).*/\1/p') >> $GITHUB_ENV
+          tar -Jcf Emacs.tar.xz Emacs.app
+      - name: Build Emacs with MPS
+        run: |
+          git clone -b 'feature/igc' --depth 1 https://github.com/emacs-mirror/emacs.git emacs-igc
+          cd emacs-igc && sed -i '' '/darwin/ s/lncurses/lncursesw/g' configure.ac
           curl -L -O https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/system-appearance.patch
           curl -L -O https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/round-undecorated-frame.patch
           patch -f -V none -p1 < system-appearance.patch
@@ -208,15 +250,15 @@ jobs:
           mv Assets.car Emacs.app/Contents/Resources/Assets.car
           plutil -replace CFBundleIconName -string EmacsLG3 Emacs.app/Contents/Info.plist
           touch Emacs.app
-          echo version=$(Emacs.app/Contents/MacOS/Emacs --version | sed -nE 's/^GNU Emacs ([0-9.]+).*/\1/p') >> $GITHUB_ENV
-          tar -Jcf Emacs.tar.xz Emacs.app
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+          echo igc_version=$(Emacs.app/Contents/MacOS/Emacs --version | sed -nE 's/^GNU Emacs ([0-9.]+).*/\1/p') >> $GITHUB_ENV
+          tar -Jcf Emacs-MPS.tar.xz Emacs.app
+      - name: Upload Emacs
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: igc-${{ needs.check.outputs.short_hash }}
-          name: Emacs ${{ env.version }} (igc-${{ needs.check.outputs.short_hash }})
-          body: |
-            Emacs build from feature/igc branch with the following patches applied:
-            - system-appearance.patch
-            - round-undecorated-frame.patch
-          files: emacs/Emacs.tar.xz
+          name: Emacs-${{ env.version }}
+          path: emacs/Emacs.tar.xz
+      - name: Upload Emacs with MPS
+        uses: actions/upload-artifact@v4
+        with:
+          name: Emacs-MPS-${{ env.igc_version }}
+          path: emacs-igc/Emacs-MPS.tar.xz

@@ -1,15 +1,15 @@
 [![MacOS Build for GNU Emacs](https://github.com/hanwenguo/emacs-ns-static-build/actions/workflows/build.yml/badge.svg)](https://github.com/hanwenguo/emacs-ns-static-build/actions/workflows/build.yml)
 
-This repository automatically builds GNU Emacs with the Memory Pool
-System for Darwin when upstream updates, directly from upstream git
-sources. This build is intended for Emacs developers who want to test
-the bleeding-edge version. Please report any bugs directly to the
-Emacs mailing list, as the source is not modified here.
+This repository automatically builds GNU Emacs with and without the Memory Pool
+System for Darwin when upstream updates, directly from upstream git sources.
+This build is intended for Emacs developers who want to test the bleeding-edge
+version. Please report any bugs directly to the Emacs mailing list, as the
+source is not modified here.
 
 No package manager is used during the build process, as all external
-dependencies are fetched from upstream and compiled from source. A
-statically linked Emacs is produced (except the system components),
-making link time optimization possible.
+dependencies are fetched from upstream and compiled from source. A statically
+linked Emacs is produced (except the system components), making link time
+optimization possible.
 
 > [!Note]
 > Emacs is built with the GNU MP Bignum Library, GnuTLS, Tree Sitter,
