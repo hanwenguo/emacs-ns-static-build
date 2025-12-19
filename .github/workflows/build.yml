@@ -242,7 +242,4 @@ jobs:
             Upstream: https://github.com/emacs-mirror/emacs/commit/${{ steps.get_commit.outputs.commit_hash }}
             Branch: ${{ matrix.branch }}
             Emacs version: ${{ env.ARTIFACT_VERSION }}
-          target_commitish: ${{ steps.get_commit.outputs.commit_hash }}
           files: ${{ matrix.build_dir }}/${{ matrix.tarball }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
