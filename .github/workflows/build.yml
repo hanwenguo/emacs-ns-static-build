@@ -230,6 +230,7 @@ jobs:
           mv Assets.car Emacs.app/Contents/Resources/Assets.car
           plutil -replace CFBundleIconName -string EmacsLG3 Emacs.app/Contents/Info.plist
           touch Emacs.app
+          codesign --force --deep -s - Emacs.app
           echo ARTIFACT_VERSION=$(Emacs.app/Contents/MacOS/Emacs --version | sed -nE 's/^GNU Emacs ([0-9.]+).*/\1/p') >> $GITHUB_ENV
           tar -Jcf '${{ matrix.tarball }}' Emacs.app
       - name: Publish release
