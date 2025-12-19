@@ -9,36 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    outputs:
-      should_build: ${{ steps.check_release.outputs.should_build }}
-      commit_hash: ${{ steps.get_commit.outputs.commit_hash }}
-      short_hash: ${{ steps.get_commit.outputs.short_hash }}
-    steps:
-      - name: Get latest commit hash
-        id: get_commit
-        run: |
-          COMMIT_HASH=$(git ls-remote https://github.com/emacs-mirror/emacs.git refs/heads/feature/igc | cut -f1)
-          echo "commit_hash=${COMMIT_HASH}" >> $GITHUB_OUTPUT
-          echo "short_hash=${COMMIT_HASH:0:7}" >> $GITHUB_OUTPUT
-          echo "Latest commit: ${COMMIT_HASH}"
-      - name: Check if release exists
-        id: check_release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view "igc-${{ steps.get_commit.outputs.short_hash }}" --repo ${{ github.repository }} > /dev/null 2>&1; then
-            echo "Release already exists for commit ${{ steps.get_commit.outputs.short_hash }}"
-            echo "should_build=false" >> $GITHUB_OUTPUT
-          else
-            echo "No release found for commit ${{ steps.get_commit.outputs.short_hash }}, will build"
-            echo "should_build=true" >> $GITHUB_OUTPUT
-          fi
-
   build:
-    needs: check
-    if: needs.check.outputs.should_build == 'true'
     runs-on: macos-15
     strategy:
       fail-fast: false
@@ -61,7 +32,32 @@ jobs:
       DEPS_PREFIX: ${{ github.workspace }}/deps
       CFLAGS: -g0 -O2 -flto=thin
     steps:
+      - name: Get upstream commit hash
+        id: get_commit
+        run: |
+          COMMIT_HASH=$(git ls-remote https://github.com/emacs-mirror/emacs.git refs/heads/${{ matrix.branch }} | cut -f1)
+          echo "commit_hash=${COMMIT_HASH}" >> $GITHUB_OUTPUT
+          echo "short_hash=${COMMIT_HASH:0:7}" >> $GITHUB_OUTPUT
+          echo "tag=${{ matrix.name }}-${COMMIT_HASH:0:7}" >> $GITHUB_OUTPUT
+      - name: Check if release exists
+        id: check_release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = "${{ steps.get_commit.outputs.tag }}";
+            const { owner, repo } = context.repo;
+            try {
+              await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+              core.setOutput("exists", "true");
+            } catch (error) {
+              if (error.status === 404) {
+                core.setOutput("exists", "false");
+                return;
+              }
+              throw error;
+            }
       - name: Uninstall Homebrew
+        if: steps.check_release.outputs.exists != 'true'
         run: |
           curl -O https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh
           sudo chmod +x uninstall.sh
@@ -70,15 +66,17 @@ jobs:
           export PATH=''
           eval $(/usr/libexec/path_helper -s)
       - name: Add dependency bin to PATH
+        if: steps.check_release.outputs.exists != 'true'
         run: echo "${DEPS_PREFIX}/bin" >> $GITHUB_PATH
       - name: Cache dependencies
+        if: steps.check_release.outputs.exists != 'true'
         id: cache-deps
         uses: actions/cache@v4
         with:
           path: ${{ env.DEPS_PREFIX }}
           key: deps-${{ runner.os }}-${{ env.DEPS_CACHE_VERSION }}
       - name: Build dependencies
-        if: steps.cache-deps.outputs.cache-hit != 'true'
+        if: steps.check_release.outputs.exists != 'true' && steps.cache-deps.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           export PATH="${DEPS_PREFIX}/bin:${PATH}"
@@ -185,6 +183,7 @@ jobs:
           make install
           touch "${DEPS_PREFIX}/.built"
       - name: Build Emacs
+        if: steps.check_release.outputs.exists != 'true'
         run: |
           set -euo pipefail
           export PATH="${DEPS_PREFIX}/bin:${PATH}"
@@ -233,8 +232,17 @@ jobs:
           touch Emacs.app
           echo ARTIFACT_VERSION=$(Emacs.app/Contents/MacOS/Emacs --version | sed -nE 's/^GNU Emacs ([0-9.]+).*/\1/p') >> $GITHUB_ENV
           tar -Jcf '${{ matrix.tarball }}' Emacs.app
-      - name: Upload Emacs
-        uses: actions/upload-artifact@v4
+      - name: Publish release
+        if: steps.check_release.outputs.exists != 'true'
+        uses: softprops/action-gh-release@v2
         with:
-          name: ${{ matrix.artifact_prefix }}-${{ env.ARTIFACT_VERSION }}
-          path: ${{ matrix.build_dir }}/${{ matrix.tarball }}
+          tag_name: ${{ steps.get_commit.outputs.tag }}
+          name: Emacs ${{ matrix.name }} ${{ env.ARTIFACT_VERSION }} (${{ steps.get_commit.outputs.short_hash }})
+          body: |
+            Upstream: https://github.com/emacs-mirror/emacs/commit/${{ steps.get_commit.outputs.commit_hash }}
+            Branch: ${{ matrix.branch }}
+            Emacs version: ${{ env.ARTIFACT_VERSION }}
+          target_commitish: ${{ steps.get_commit.outputs.commit_hash }}
+          files: ${{ matrix.build_dir }}/${{ matrix.tarball }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
