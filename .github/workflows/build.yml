@@ -132,21 +132,21 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/emacs-mirror/emacs.git
           cd emacs && sed -i '' '/darwin/ s/lncurses/lncursesw/g' configure.ac
-          ./autogen.sh && ./configure CFLAGS='-g0 -O2 -flto=thin'      \
-                                      PKG_CONFIG='pkg-config -static'  \
-                                      --disable-gc-mark-trace          \
-                                      --without-all                    \
-                                      --with-compress-install          \
-                                      --with-gmp                       \
-                                      --with-gnutls                    \
-                                      --with-modules                   \
-                                      --with-native-image-api          \
-                                      --with-ns                        \
-                                      --with-small-ja-dic              \
-                                      --with-threads                   \
-                                      --with-toolkit-scroll-bars       \
-                                      --with-tree-sitter               \
-                                      --with-xml2                      \
+          ./autogen.sh && ./configure CFLAGS='-O2 -g0 -flto=thin'   \
+                                      PKG_CONFIG='pkgconf -static'  \
+                                      --disable-gc-mark-trace       \
+                                      --without-all                 \
+                                      --with-compress-install       \
+                                      --with-gmp                    \
+                                      --with-gnutls                 \
+                                      --with-modules                \
+                                      --with-native-image-api       \
+                                      --with-ns                     \
+                                      --with-small-ja-dic           \
+                                      --with-threads                \
+                                      --with-toolkit-scroll-bars    \
+                                      --with-tree-sitter            \
+                                      --with-xml2                   \
                                       --with-zlib
           make -j4 && make install
           ditto nextstep/Emacs.app Emacs.app
@@ -156,22 +156,22 @@ jobs:
         run: |
           git clone -b 'feature/igc' --depth 1 https://github.com/emacs-mirror/emacs.git emacs-igc
           cd emacs-igc && sed -i '' '/darwin/ s/lncurses/lncursesw/g' configure.ac
-          ./autogen.sh && ./configure CFLAGS='-g0 -O2 -flto=thin'      \
-                                      PKG_CONFIG='pkg-config -static'  \
-                                      --disable-gc-mark-trace          \
-                                      --without-all                    \
-                                      --with-compress-install          \
-                                      --with-gmp                       \
-                                      --with-gnutls                    \
-                                      --with-modules                   \
-                                      --with-mps                       \
-                                      --with-native-image-api          \
-                                      --with-ns                        \
-                                      --with-small-ja-dic              \
-                                      --with-threads                   \
-                                      --with-toolkit-scroll-bars       \
-                                      --with-tree-sitter               \
-                                      --with-xml2                      \
+          ./autogen.sh && ./configure CFLAGS='-O2 -g0 -flto=thin'   \
+                                      PKG_CONFIG='pkgconf -static'  \
+                                      --disable-gc-mark-trace       \
+                                      --without-all                 \
+                                      --with-compress-install       \
+                                      --with-gmp                    \
+                                      --with-gnutls                 \
+                                      --with-modules                \
+                                      --with-mps                    \
+                                      --with-native-image-api       \
+                                      --with-ns                     \
+                                      --with-small-ja-dic           \
+                                      --with-threads                \
+                                      --with-toolkit-scroll-bars    \
+                                      --with-tree-sitter            \
+                                      --with-xml2                   \
                                       --with-zlib
           make -j4 && make install
           ditto nextstep/Emacs.app Emacs.app
