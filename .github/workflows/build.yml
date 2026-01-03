@@ -30,7 +30,7 @@ jobs:
     env:
       DEPS_CACHE_VERSION: v1
       DEPS_PREFIX: ${{ github.workspace }}/deps
-      CFLAGS: -g0 -O2 -flto=thin
+      CFLAGS: -O2 -g0 -flto=thin
     steps:
       - name: Get upstream commit hash
         id: get_commit
@@ -196,7 +196,7 @@ jobs:
           curl -L -O https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/round-undecorated-frame.patch
           patch -f -V none -p1 < system-appearance.patch
           patch -f -V none -p1 < round-undecorated-frame.patch
-          ./autogen.sh && ./configure PKG_CONFIG="${DEPS_PREFIX}/bin/pkg-config --static" \
+          ./autogen.sh && ./configure PKG_CONFIG="${DEPS_PREFIX}/bin/pkgconf --static" \
                                       --disable-gc-mark-trace          \
                                       --without-all                    \
                                       --with-compress-install          \
