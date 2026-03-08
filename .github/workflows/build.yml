@@ -200,6 +200,7 @@ jobs:
                                       --disable-gc-mark-trace          \
                                       --without-all                    \
                                       --with-compress-install          \
+                                      --with-file-notification=kqueue  \
                                       --with-gmp                       \
                                       --with-gnutls                    \
                                       --with-modules                   \
