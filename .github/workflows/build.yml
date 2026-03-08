@@ -22,7 +22,7 @@ jobs:
             artifact_prefix: Emacs
             extra_configure: ""
           - name: igc
-            branch: feature/igc
+            branch: feature/igc3
             build_dir: emacs-igc
             tarball: Emacs-MPS.tar.xz
             artifact_prefix: Emacs-MPS
