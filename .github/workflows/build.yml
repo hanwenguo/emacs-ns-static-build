@@ -155,7 +155,7 @@ jobs:
           tar -Jcf Emacs.tar.xz Emacs.app
       - name: Build Emacs with MPS
         run: |
-          git clone -b 'feature/igc' --depth 1 https://github.com/emacs-mirror/emacs.git emacs-igc
+          git clone -b 'feature/igc3' --depth 1 https://github.com/emacs-mirror/emacs.git emacs-igc
           cd emacs-igc && sed -i '' '/darwin/ s/lncurses/lncursesw/g' configure.ac
           ./autogen.sh && ./configure CFLAGS='-O2 -g0 -flto=thin'     \
                                       PKG_CONFIG='pkgconf -static'    \
