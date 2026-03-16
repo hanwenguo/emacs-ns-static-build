@@ -180,12 +180,12 @@ jobs:
           echo igc_version=$(Emacs.app/Contents/MacOS/Emacs --version | sed -nE 's/^GNU Emacs ([0-9.]+).*/\1/p') >> $GITHUB_ENV
           tar -Jcf Emacs-MPS.tar.xz Emacs.app
       - name: Upload Emacs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Emacs-${{ env.version }}
           path: emacs/Emacs.tar.xz
       - name: Upload Emacs with MPS
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Emacs-MPS-${{ env.igc_version }}
           path: emacs-igc/Emacs-MPS.tar.xz
