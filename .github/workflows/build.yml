@@ -247,7 +247,7 @@ jobs:
           files: ${{ matrix.build_dir }}/${{ matrix.tarball }}
       - name: Delete older releases for branch
         if: steps.check_release.outputs.exists != 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const prefix = `${{ matrix.name }}-`;
