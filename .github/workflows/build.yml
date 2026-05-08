@@ -17,6 +17,12 @@ jobs:
         include:
           - name: master
             branch: master
+            build_dir: emacs-master
+            tarball: Emacs-master.tar.xz
+            artifact_prefix: Emacs-master
+            extra_configure: ""
+          - name: emacs-31
+            branch: emacs-31
             build_dir: emacs
             tarball: Emacs.tar.xz
             artifact_prefix: Emacs
@@ -24,8 +30,8 @@ jobs:
           - name: igc
             branch: feature/igc3
             build_dir: emacs-igc
-            tarball: Emacs-MPS.tar.xz
-            artifact_prefix: Emacs-MPS
+            tarball: Emacs-igc.tar.xz
+            artifact_prefix: Emacs-igc
             extra_configure: "--with-mps"
     env:
       DEPS_CACHE_VERSION: v2
