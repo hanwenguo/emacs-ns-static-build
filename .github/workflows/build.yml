@@ -34,7 +34,7 @@ jobs:
             artifact_prefix: Emacs-igc
             extra_configure: "--with-mps"
     env:
-      DEPS_CACHE_VERSION: v2
+      DEPS_CACHE_VERSION: v3
       DEPS_PREFIX: ${{ github.workspace }}/deps
       CFLAGS: -O2 -g0 -flto
     steps:
@@ -95,13 +95,13 @@ jobs:
           ./configure --prefix="${DEPS_PREFIX}" && make -j4
           make install
           cd ..
-          curl -LO https://ftpmirror.gnu.org/gnu/autoconf/autoconf-2.72.tar.xz
-          tar -Jxf autoconf-2.72.tar.xz && cd autoconf-2.72
+          curl -LO https://ftpmirror.gnu.org/gnu/autoconf/autoconf-2.73.tar.xz
+          tar -Jxf autoconf-2.73.tar.xz && cd autoconf-2.73
           ./configure --prefix="${DEPS_PREFIX}" && make -j4
           make install
           cd ..
-          curl -LO https://ftpmirror.gnu.org/gnu/automake/automake-1.18.tar.xz
-          tar -Jxf automake-1.18.tar.xz && cd automake-1.18
+          curl -LO https://ftpmirror.gnu.org/gnu/automake/automake-1.18.1.tar.xz
+          tar -Jxf automake-1.18.1.tar.xz && cd automake-1.18.1
           ./configure --prefix="${DEPS_PREFIX}" && make -j4
           make install
           cd ..
@@ -131,8 +131,8 @@ jobs:
           ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
           make install
           cd ..
-          curl -LO https://ftpmirror.gnu.org/gnu/gettext/gettext-0.26.tar.xz
-          tar -Jxf gettext-0.26.tar.xz && cd gettext-0.26
+          curl -LO https://ftpmirror.gnu.org/gnu/gettext/gettext-1.0.tar.xz
+          tar -Jxf gettext-1.0.tar.xz && cd gettext-1.0
           ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
           make install
           cd ..
@@ -147,8 +147,8 @@ jobs:
           ./configure --static --prefix="${DEPS_PREFIX}" && make -j4
           make install
           cd ..
-          curl -O https://download.gnome.org/sources/libxml2/2.15/libxml2-2.15.2.tar.xz
-          tar -Jxf libxml2-2.15.2.tar.xz && cd libxml2-2.15.2
+          curl -O https://download.gnome.org/sources/libxml2/2.15/libxml2-2.15.3.tar.xz
+          tar -Jxf libxml2-2.15.3.tar.xz && cd libxml2-2.15.3
           ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
           make install
           cd ..
@@ -157,8 +157,8 @@ jobs:
           ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
           make install
           cd ..
-          curl -LO https://ftpmirror.gnu.org/gnu/nettle/nettle-3.10.2.tar.gz
-          tar -zxf nettle-3.10.2.tar.gz && cd nettle-3.10.2
+          curl -LO https://ftpmirror.gnu.org/gnu/nettle/nettle-4.0.tar.gz
+          tar -zxf nettle-4.0.tar.gz && cd nettle-4.0
           ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
           make install
           cd ..
@@ -167,19 +167,19 @@ jobs:
           ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
           make install
           cd ..
-          curl -O https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.12.tar.xz
-          tar -Jxf gnutls-3.8.12.tar.xz && cd gnutls-3.8.12
+          curl -O https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.13.tar.xz
+          tar -Jxf gnutls-3.8.13.tar.xz && cd gnutls-3.8.13
           ./configure --prefix="${DEPS_PREFIX}" --disable-shared --with-included-libtasn1 --without-p11-kit && make -j4
           make install
           cd ..
-          curl -LO https://github.com/tree-sitter/tree-sitter/archive/refs/tags/v0.26.7.tar.gz
-          tar -zxf v0.26.7.tar.gz && cd tree-sitter-0.26.7
+          curl -LO https://github.com/tree-sitter/tree-sitter/archive/refs/tags/v0.26.8.tar.gz
+          tar -zxf v0.26.8.tar.gz && cd tree-sitter-0.26.8
           make -j4
           make install PREFIX="${DEPS_PREFIX}"
           find "${DEPS_PREFIX}/lib" -name 'libtree-sitter*.dylib' -delete
           cd ..
-          curl -O https://www.sqlite.org/2026/sqlite-autoconf-3510300.tar.gz
-          tar -zxf sqlite-autoconf-3510300.tar.gz && cd sqlite-autoconf-3510300
+          curl -O https://www.sqlite.org/2026/sqlite-autoconf-3530100.tar.gz
+          tar -zxf sqlite-autoconf-3530100.tar.gz && cd sqlite-autoconf-3530100
           ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
           make install
           cd ..
