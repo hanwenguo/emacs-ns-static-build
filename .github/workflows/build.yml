@@ -62,6 +62,9 @@ jobs:
               }
               throw error;
             }
+      - name: Checkout build scripts
+        if: steps.check_release.outputs.exists != 'true'
+        uses: actions/checkout@v5
       - name: Uninstall Homebrew
         if: steps.check_release.outputs.exists != 'true'
         run: |
@@ -223,8 +226,7 @@ jobs:
                                       ${{ matrix.extra_configure }}
           make -j4 && make install
           ditto nextstep/Emacs.app Emacs.app
-          # Create wrapper script to call Emacs binary
-          mkdir -p Emacs.app/Contents/MacOS/bin
+          # Add command-line helpers used by the packaged apps.
           cat > Emacs.app/Contents/MacOS/bin/emacs << 'EOF'
           #!/bin/bash
           exec /Applications/Emacs.app/Contents/MacOS/Emacs "$@"
@@ -237,9 +239,15 @@ jobs:
           mv Assets.car Emacs.app/Contents/Resources/Assets.car
           plutil -replace CFBundleIconName -string EmacsLG3 Emacs.app/Contents/Info.plist
           touch Emacs.app
+          ARTIFACT_VERSION=$(Emacs.app/Contents/MacOS/Emacs --version | sed -nE 's/^GNU Emacs ([0-9.]+).*/\1/p')
+          echo "ARTIFACT_VERSION=${ARTIFACT_VERSION}" >> $GITHUB_ENV
+          bash "${GITHUB_WORKSPACE}/scripts/create-emacs-client-app.sh" \
+            --emacs-app Emacs.app \
+            --client-app "Emacs Client.app" \
+            --version "${ARTIFACT_VERSION}"
           codesign --force --deep -s - Emacs.app
-          echo ARTIFACT_VERSION=$(Emacs.app/Contents/MacOS/Emacs --version | sed -nE 's/^GNU Emacs ([0-9.]+).*/\1/p') >> $GITHUB_ENV
-          tar -Jcf '${{ matrix.tarball }}' Emacs.app
+          codesign --force --deep -s - "Emacs Client.app"
+          tar -Jcf '${{ matrix.tarball }}' Emacs.app "Emacs Client.app"
       - name: Publish release
         if: steps.check_release.outputs.exists != 'true'
         uses: softprops/action-gh-release@v3

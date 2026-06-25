@@ -6,6 +6,12 @@ This build is intended for Emacs developers who want to test the bleeding-edge
 version. Please report any bugs directly to the Emacs mailing list, as the
 source is not modified here.
 
+Release tarballs contain both `Emacs.app` and `Emacs Client.app`. `Emacs
+Client.app` is an AppleScript app for Finder open-with, drag-and-drop,
+Spotlight/Dock launch, and `org-protocol://` URLs. It assumes `Emacs.app` is
+installed at `/Applications/Emacs.app`. This feature is taken from
+[emacs-plus](https://github.com/d12frosted/homebrew-emacs-plus).
+
 No package manager is used during the build process, as all external
 dependencies are fetched from upstream and compiled from source. A statically
 linked Emacs is produced (except the system components), making link time
