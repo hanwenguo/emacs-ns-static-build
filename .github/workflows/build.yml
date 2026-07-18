@@ -123,13 +123,13 @@ jobs:
           ./configure --prefix="${DEPS_PREFIX}" && make -j4
           make install
           cd ..
-          curl -fLO https://ftpmirror.gnu.org/gnu/libtool/libtool-2.5.4.tar.xz --retry 3
-          tar -Jxf libtool-2.5.4.tar.xz && cd libtool-2.5.4
+          curl -fLO https://ftpmirror.gnu.org/gnu/libtool/libtool-2.6.2.tar.xz --retry 3
+          tar -Jxf libtool-2.6.2.tar.xz && cd libtool-2.6.2
           ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
           make install
           cd ..
-          curl -fLO https://github.com/pkgconf/pkgconf/archive/refs/tags/pkgconf-2.5.1.tar.gz --retry 3
-          tar -zxf pkgconf-2.5.1.tar.gz && cd pkgconf-pkgconf-2.5.1
+          curl -fLO https://github.com/pkgconf/pkgconf/archive/refs/tags/pkgconf-3.0.3.tar.gz --retry 3
+          tar -zxf pkgconf-3.0.3.tar.gz && cd pkgconf-pkgconf-3.0.3
           ./autogen.sh && ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
           make install
           ln -sf "${DEPS_PREFIX}/bin/pkgconf" "${DEPS_PREFIX}/bin/pkg-config"
@@ -190,8 +190,8 @@ jobs:
           ./configure --prefix="${DEPS_PREFIX}" --disable-shared --with-included-libtasn1 --without-p11-kit && make -j4
           make install
           cd ..
-          curl -fLO https://github.com/tree-sitter/tree-sitter/archive/refs/tags/v0.26.8.tar.gz --retry 3
-          tar -zxf v0.26.8.tar.gz && cd tree-sitter-0.26.8
+          curl -fLO https://github.com/tree-sitter/tree-sitter/archive/refs/tags/v0.26.11.tar.gz --retry 3
+          tar -zxf v0.26.11.tar.gz && cd tree-sitter-0.26.11
           make -j4
           make install PREFIX="${DEPS_PREFIX}"
           find "${DEPS_PREFIX}/lib" -name 'libtree-sitter*.dylib' -delete
