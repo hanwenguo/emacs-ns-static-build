@@ -12,6 +12,22 @@ Spotlight/Dock launch, and `org-protocol://` URLs. It assumes `Emacs.app` is
 installed at `/Applications/Emacs.app`. This feature is taken from
 [emacs-plus](https://github.com/d12frosted/homebrew-emacs-plus).
 
+## Homebrew
+
+The three build channels are available from the personal tap:
+
+```sh
+brew install --cask --no-quarantine hanwenguo/tap/emacs-ns-static
+brew install --cask --no-quarantine hanwenguo/tap/emacs-ns-static-master
+brew install --cask --no-quarantine hanwenguo/tap/emacs-ns-static-igc
+```
+
+The apps are ad-hoc signed rather than notarized by Apple. Using
+`--no-quarantine` is an explicit decision to trust these builds; Homebrew still
+verifies each release archive against the checksum recorded in the tap. Only
+one channel can be installed at a time because all three provide `Emacs.app`,
+`Emacs Client.app`, and the same command-line tools.
+
 No package manager is used during the build process, as all external
 dependencies are fetched from upstream and compiled from source. A statically
 linked Emacs is produced (except the system components), making link time
