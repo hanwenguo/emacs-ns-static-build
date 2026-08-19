@@ -36,6 +36,7 @@ jobs:
     env:
       DEPS_CACHE_VERSION: v3
       DEPS_PREFIX: ${{ github.workspace }}/deps
+      RELEASE_RETENTION: "21"
       CFLAGS: -O2 -g0 -flto
     steps:
       - name: Get upstream commit hash
@@ -265,8 +266,12 @@ jobs:
         with:
           script: |
             const prefix = `${{ matrix.name }}-`;
-            const keepTag = `${{ steps.get_commit.outputs.tag }}`;
+            const retentionCount = Number.parseInt(process.env.RELEASE_RETENTION, 10);
             const { owner, repo } = context.repo;
+
+            if (!Number.isInteger(retentionCount) || retentionCount < 1) {
+              throw new Error(`Invalid release retention count: ${process.env.RELEASE_RETENTION}`);
+            }
 
             const releases = await github.paginate(github.rest.repos.listReleases, {
               owner,
@@ -275,8 +280,9 @@ jobs:
             });
 
             const toDelete = releases
-              .filter((release) => release.tag_name.startsWith(prefix) && release.tag_name !== keepTag)
-              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+              .filter((release) => release.tag_name.startsWith(prefix))
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+              .slice(retentionCount);
 
             for (const release of toDelete) {
               core.info(`Deleting release ${release.tag_name} (id=${release.id})`);

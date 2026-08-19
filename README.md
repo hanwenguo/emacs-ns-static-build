@@ -28,6 +28,10 @@ verifies each release archive against the checksum recorded in the tap. Only
 one channel can be installed at a time because all three provide `Emacs.app`,
 `Emacs Client.app`, and the same command-line tools.
 
+The build workflow retains the 21 most recent releases for each channel. This
+keeps the version currently referenced by the tap downloadable while a newer
+build is being tested and published, including during multi-day updater delays.
+
 No package manager is used during the build process, as all external
 dependencies are fetched from upstream and compiled from source. A statically
 linked Emacs is produced (except the system components), making link time
