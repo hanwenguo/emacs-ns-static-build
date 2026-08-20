@@ -1,27 +1,31 @@
 diff --git a/gcc/jit/Make-lang.in b/gcc/jit/Make-lang.in
-index eb1c996..59497bd 100644
 --- a/gcc/jit/Make-lang.in
 +++ b/gcc/jit/Make-lang.in
-@@ -73 +73 @@ LIBGCCJIT_SONAME = \
--LIBGCCJIT_FILENAME = $(LIBGCCJIT_BASENAME).$(LIBGCCJIT_VERSION_NUM).dylib
-+LIBGCCJIT_FILENAME = $(LIBGCCJIT_BASENAME).a
-@@ -93,2 +92,0 @@ jit: $(LIBGCCJIT_FILENAME) \
--	$(LIBGCCJIT_SYMLINK) \
--	$(LIBGCCJIT_LINKER_NAME_SYMLINK) \
-@@ -189,0 +188,7 @@ $(LIBGCCJIT_FILENAME): $(jit_OBJS) \
+@@ -74,0 +75 @@
++LIBGCCJIT_STATIC_FILENAME = $(LIBGCCJIT_BASENAME).a
+@@ -92,0 +94 @@
++	$(LIBGCCJIT_STATIC_FILENAME) \
+@@ -128 +130 @@
+-jit.serial = $(LIBGCCJIT_FILENAME)
++jit.serial = $(LIBGCCJIT_FILENAME) $(LIBGCCJIT_STATIC_FILENAME)
+@@ -195,0 +198,13 @@
++
 +ifneq (,$(findstring darwin,$(host)))
++$(LIBGCCJIT_STATIC_FILENAME): $(jit_OBJS) \
++	libbackend.a libcommon-target.a libcommon.a \
++	$(CPPLIB) $(LIBDECNUMBER) \
++	$(LIBDEPS) $(srcdir)/jit/libgccjit.map \
++	$(EXTRA_GCC_OBJS_EXCLUSIVE) $(jit.prev)
 +	rm -f $@
 +	/usr/bin/libtool -static -o $@ \
 +	     $(jit_OBJS) libbackend.a libcommon-target.a libcommon.a \
 +	     $(CPPLIB) $(LIBDECNUMBER) $(LIBBACKTRACE) $(LIBIBERTY) \
 +	     $(EXTRA_GCC_OBJS_EXCLUSIVE)
-+else
-@@ -194,0 +200 @@ $(LIBGCCJIT_FILENAME): $(jit_OBJS) \
 +endif
-@@ -398 +404 @@ jit.install-common: installdirs jit.install-headers
--	$(INSTALL_PROGRAM) $(LIBGCCJIT_FILENAME) \
-+	$(INSTALL_DATA) $(LIBGCCJIT_FILENAME) \
-@@ -400,3 +405,0 @@ jit.install-common: installdirs jit.install-headers
--	ln -sf \
--	  $(LIBGCCJIT_SONAME_SYMLINK)\
--	  $(DESTDIR)$(libdir)/$(LIBGCCJIT_LINKER_NAME_SYMLINK)
+@@ -399,0 +415,2 @@
++	$(INSTALL_DATA) $(LIBGCCJIT_STATIC_FILENAME) \
++	  $(DESTDIR)$(libdir)/$(LIBGCCJIT_STATIC_FILENAME)
+@@ -429 +446,2 @@
+-	-rm -f $(LIBGCCJIT_FILENAME) $(LIBGCCJIT_SYMLINK)
++	-rm -f $(LIBGCCJIT_FILENAME) $(LIBGCCJIT_STATIC_FILENAME) \
++	  $(LIBGCCJIT_SYMLINK)

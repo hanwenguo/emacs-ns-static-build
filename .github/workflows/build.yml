@@ -45,7 +45,7 @@ jobs:
             artifact_prefix: Emacs-igc
             extra_configure: "--with-mps"
     env:
-      DEPS_CACHE_VERSION: v5-static-native-comp-bootstrap-toolchain
+      DEPS_CACHE_VERSION: v6-dual-libgccjit-delete-shared-toolchain
       DEPS_PREFIX: ${{ github.workspace }}/deps
       RELEASE_RETENTION: "21"
       CFLAGS: -flto -g0 -O2

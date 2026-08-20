@@ -56,7 +56,7 @@ env CFLAGS="-O2 -g0" CXXFLAGS="-O2 -g0" \
     --disable-libstdcxx-pch \
     --disable-multilib \
     --disable-nls \
-    --disable-shared \
+    --enable-shared \
     --enable-checking=release \
     --enable-languages=c,c++,jit \
     --with-gcc-major-version-only \
@@ -76,6 +76,11 @@ env CFLAGS="-O2 -g0" CXXFLAGS="-O2 -g0" \
 make install
 
 test -f "${DEPS_PREFIX}/lib/libgccjit.a"
+shared_jit=$(find "${DEPS_PREFIX}" -name 'libgccjit*.dylib' -print -quit)
+if [[ -z "${shared_jit}" ]]; then
+  echo "Shared libgccjit was not installed alongside libgccjit.a" >&2
+  exit 1
+fi
 for runtime_archive in libstdc++.a libgcc.a; do
   archive_path=$(find "${DEPS_PREFIX}" -name "${runtime_archive}" -print -quit)
   if [[ -z "${archive_path}" || ! -f "${archive_path}" ]]; then
@@ -83,6 +88,7 @@ for runtime_archive in libstdc++.a libgcc.a; do
     exit 1
   fi
 done
+find "${DEPS_PREFIX}" -name '*.dylib' -print -delete
 unexpected_dylibs=$(find "${DEPS_PREFIX}" -name '*.dylib' -print)
 if [[ -n "${unexpected_dylibs}" ]]; then
   echo "Third-party dynamic libraries were produced:" >&2
