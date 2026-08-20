@@ -235,6 +235,7 @@ jobs:
                                       --with-threads                   \
                                       --with-toolkit-scroll-bars       \
                                       --with-tree-sitter               \
+                                      --with-xwidgets                  \
                                       --with-xml2                      \
                                       --with-zlib                      \
                                       --with-sqlite3                   \
