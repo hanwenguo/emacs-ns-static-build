@@ -34,7 +34,7 @@ jobs:
             artifact_prefix: Emacs-igc
             extra_configure: "--with-mps"
     env:
-      DEPS_CACHE_VERSION: v3
+      DEPS_CACHE_VERSION: v4-toolchain
       DEPS_PREFIX: ${{ github.workspace }}/deps
       RELEASE_RETENTION: "21"
       CFLAGS: -O2 -g0 -flto
@@ -78,13 +78,27 @@ jobs:
       - name: Add dependency bin to PATH
         if: steps.check_release.outputs.exists != 'true'
         run: echo "${DEPS_PREFIX}/bin" >> $GITHUB_PATH
+      - name: Identify dependency toolchain
+        if: steps.check_release.outputs.exists != 'true'
+        id: dependency-toolchain
+        run: |
+          set -euo pipefail
+          toolchain_fingerprint=$(
+            {
+              xcodebuild -version
+              xcrun --sdk macosx --show-sdk-version
+              xcrun --find clang
+              clang --version
+            } | shasum -a 256 | cut -d ' ' -f1
+          )
+          echo "fingerprint=${toolchain_fingerprint}" >> "$GITHUB_OUTPUT"
       - name: Cache dependencies
         if: steps.check_release.outputs.exists != 'true'
         id: cache-deps
         uses: actions/cache@v5
         with:
           path: ${{ env.DEPS_PREFIX }}
-          key: deps-${{ runner.os }}-${{ env.DEPS_CACHE_VERSION }}
+          key: deps-${{ runner.os }}-${{ runner.arch }}-${{ env.DEPS_CACHE_VERSION }}-${{ steps.dependency-toolchain.outputs.fingerprint }}
       - name: Build dependencies
         if: steps.check_release.outputs.exists != 'true' && steps.cache-deps.outputs.cache-hit != 'true'
         run: |
