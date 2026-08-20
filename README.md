@@ -39,7 +39,6 @@ optimization possible.
 
 > [!Note]
 > Emacs is built with the GNU MP Bignum Library, GnuTLS, Tree Sitter,
-> XML2 and Zlib.  Native compilation is likely not supported, since
-> compiling libgccjit is considered too resource-intensive, and it
-> will probably take hours to generate native components after temacs
-> bootstrap.
+> XML2 and Zlib. Native compilation uses an experimental static libgccjit
+> archive built locally from GCC sources; no third-party dynamic library is
+> included or linked.
