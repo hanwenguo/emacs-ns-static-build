@@ -19,22 +19,40 @@ download_and_verify() {
   echo "${sha256}  ${output}" | shasum --algorithm 256 --check
 }
 
-gcc_tarball="gcc-${GCC_VERSION}.tar.xz"
-gcc_source="gcc-${GCC_VERSION}"
-darwin_patch="gcc-${GCC_VERSION}-darwin.patch"
+gcc_work_root="${DEPS_PREFIX}/.gcc-work"
+gcc_tarball="${gcc_work_root}/gcc-${GCC_VERSION}.tar.xz"
+gcc_source="${gcc_work_root}/gcc-${GCC_VERSION}"
+gcc_build="${gcc_work_root}/gcc-build"
+darwin_patch="${gcc_work_root}/gcc-${GCC_VERSION}-darwin.patch"
+source_ready="${gcc_source}/.codex-patches-applied"
+mkdir -p "${gcc_work_root}"
 
-download_and_verify \
-  "https://ftpmirror.gnu.org/gnu/gcc/gcc-${GCC_VERSION}/${gcc_tarball}" \
-  "${gcc_tarball}" \
-  "${GCC_SHA256}"
-tar -Jxf "${gcc_tarball}"
+if [[ -f "${gcc_tarball}" ]]; then
+  echo "${GCC_SHA256}  ${gcc_tarball}" | shasum --algorithm 256 --check
+else
+  download_and_verify \
+    "https://ftpmirror.gnu.org/gnu/gcc/gcc-${GCC_VERSION}/gcc-${GCC_VERSION}.tar.xz" \
+    "${gcc_tarball}" \
+    "${GCC_SHA256}"
+fi
 
-download_and_verify \
-  "https://raw.githubusercontent.com/Homebrew/homebrew-core/${GCC_DARWIN_PATCH_COMMIT}/Patches/gcc/gcc-${GCC_VERSION}.diff" \
-  "${darwin_patch}" \
-  "${GCC_DARWIN_PATCH_SHA256}"
-patch -d "${gcc_source}" -p1 < "${darwin_patch}"
-patch -d "${gcc_source}" -p1 < "${GITHUB_WORKSPACE}/patches/gcc-16-libgccjit-static.patch"
+if [[ -f "${darwin_patch}" ]]; then
+  echo "${GCC_DARWIN_PATCH_SHA256}  ${darwin_patch}" | shasum --algorithm 256 --check
+else
+  download_and_verify \
+    "https://raw.githubusercontent.com/Homebrew/homebrew-core/${GCC_DARWIN_PATCH_COMMIT}/Patches/gcc/gcc-${GCC_VERSION}.diff" \
+    "${darwin_patch}" \
+    "${GCC_DARWIN_PATCH_SHA256}"
+fi
+
+if [[ ! -f "${source_ready}" ]]; then
+  test "${gcc_source}" = "${gcc_work_root}/gcc-${GCC_VERSION}"
+  rm -rf -- "${gcc_source}"
+  tar -C "${gcc_work_root}" -Jxf "${gcc_tarball}"
+  patch -d "${gcc_source}" -p1 < "${darwin_patch}"
+  patch -d "${gcc_source}" -p1 < "${GITHUB_WORKSPACE}/patches/gcc-16-libgccjit-static.patch"
+  touch "${source_ready}"
+fi
 
 case "$(uname -m)" in
   arm64) build_cpu=aarch64 ;;
@@ -44,29 +62,34 @@ esac
 
 darwin_major=$(uname -r | cut -d. -f1)
 sdk_path=$(xcrun --show-sdk-path)
-mkdir "gcc-build"
-cd "gcc-build"
+if [[ ! -f "${gcc_build}/Makefile" ]]; then
+  test "${gcc_build}" = "${gcc_work_root}/gcc-build"
+  rm -rf -- "${gcc_build}"
+  mkdir -p "${gcc_build}"
+  cd "${gcc_build}"
+  env CFLAGS="-O2 -g0" CXXFLAGS="-O2 -g0" \
+    "${gcc_source}/configure" \
+      --prefix="${DEPS_PREFIX}" \
+      --libdir="${DEPS_PREFIX}/lib" \
+      --build="${build_cpu}-apple-darwin${darwin_major}" \
+      --enable-bootstrap \
+      --disable-libstdcxx-pch \
+      --disable-multilib \
+      --disable-nls \
+      --enable-shared \
+      --enable-checking=release \
+      --enable-languages=c,c++,jit \
+      --with-gcc-major-version-only \
+      --with-gmp="${DEPS_PREFIX}" \
+      --with-isl="${DEPS_PREFIX}" \
+      --with-mpc="${DEPS_PREFIX}" \
+      --with-mpfr="${DEPS_PREFIX}" \
+      --with-sysroot="${sdk_path}" \
+      --with-system-zlib \
+      --without-zstd
+fi
 
-env CFLAGS="-O2 -g0" CXXFLAGS="-O2 -g0" \
-  "../${gcc_source}/configure" \
-    --prefix="${DEPS_PREFIX}" \
-    --libdir="${DEPS_PREFIX}/lib" \
-    --build="${build_cpu}-apple-darwin${darwin_major}" \
-    --enable-bootstrap \
-    --disable-libstdcxx-pch \
-    --disable-multilib \
-    --disable-nls \
-    --enable-shared \
-    --enable-checking=release \
-    --enable-languages=c,c++,jit \
-    --with-gcc-major-version-only \
-    --with-gmp="${DEPS_PREFIX}" \
-    --with-isl="${DEPS_PREFIX}" \
-    --with-mpc="${DEPS_PREFIX}" \
-    --with-mpfr="${DEPS_PREFIX}" \
-    --with-sysroot="${sdk_path}" \
-    --with-system-zlib \
-    --without-zstd
+cd "${gcc_build}"
 
 env CFLAGS="-O2 -g0" CXXFLAGS="-O2 -g0" \
   make -j"${JOBS}" \
@@ -76,13 +99,13 @@ env CFLAGS="-O2 -g0" CXXFLAGS="-O2 -g0" \
 make install
 
 test -f "${DEPS_PREFIX}/lib/libgccjit.a"
-shared_jit=$(find "${DEPS_PREFIX}" -name 'libgccjit*.dylib' -print -quit)
+shared_jit=$(find "${DEPS_PREFIX}/lib" -name 'libgccjit*.dylib' -print -quit)
 if [[ -z "${shared_jit}" ]]; then
   echo "Shared libgccjit was not installed alongside libgccjit.a" >&2
   exit 1
 fi
 for runtime_archive in libstdc++.a libgcc.a; do
-  archive_path=$(find "${DEPS_PREFIX}" -name "${runtime_archive}" -print -quit)
+  archive_path=$(find "${DEPS_PREFIX}/lib" -name "${runtime_archive}" -print -quit)
   if [[ -z "${archive_path}" || ! -f "${archive_path}" ]]; then
     echo "Static GCC runtime archive was not installed: ${runtime_archive}" >&2
     exit 1
@@ -95,3 +118,6 @@ if [[ -n "${unexpected_dylibs}" ]]; then
   echo "${unexpected_dylibs}" >&2
   exit 1
 fi
+test "${gcc_work_root}" = "${DEPS_PREFIX}/.gcc-work"
+cd "${DEPS_PREFIX}"
+rm -rf -- "${gcc_work_root}"
