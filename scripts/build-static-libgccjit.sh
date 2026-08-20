@@ -52,12 +52,13 @@ env CFLAGS="-O2 -g0" CXXFLAGS="-O2 -g0" \
     --prefix="${DEPS_PREFIX}" \
     --libdir="${DEPS_PREFIX}/lib" \
     --build="${build_cpu}-apple-darwin${darwin_major}" \
-    --disable-bootstrap \
+    --enable-bootstrap \
+    --disable-libstdcxx-pch \
     --disable-multilib \
     --disable-nls \
     --disable-shared \
     --enable-checking=release \
-    --enable-languages=jit \
+    --enable-languages=c,c++,jit \
     --with-gcc-major-version-only \
     --with-gmp="${DEPS_PREFIX}" \
     --with-isl="${DEPS_PREFIX}" \
@@ -68,10 +69,20 @@ env CFLAGS="-O2 -g0" CXXFLAGS="-O2 -g0" \
     --without-zstd
 
 env CFLAGS="-O2 -g0" CXXFLAGS="-O2 -g0" \
-  make -j"${JOBS}" LDFLAGS="-Wl,-headerpad_max_install_names"
+  make -j"${JOBS}" \
+    BOOT_CFLAGS="-O2 -g0" \
+    BOOT_LDFLAGS="-Wl,-headerpad_max_install_names" \
+    bootstrap-lean
 make install
 
 test -f "${DEPS_PREFIX}/lib/libgccjit.a"
+for runtime_archive in libstdc++.a libgcc.a; do
+  archive_path=$(find "${DEPS_PREFIX}" -name "${runtime_archive}" -print -quit)
+  if [[ -z "${archive_path}" || ! -f "${archive_path}" ]]; then
+    echo "Static GCC runtime archive was not installed: ${runtime_archive}" >&2
+    exit 1
+  fi
+done
 unexpected_dylibs=$(find "${DEPS_PREFIX}" -name '*.dylib' -print)
 if [[ -n "${unexpected_dylibs}" ]]; then
   echo "Third-party dynamic libraries were produced:" >&2

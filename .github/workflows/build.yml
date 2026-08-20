@@ -45,7 +45,7 @@ jobs:
             artifact_prefix: Emacs-igc
             extra_configure: "--with-mps"
     env:
-      DEPS_CACHE_VERSION: v4-static-native-comp-toolchain
+      DEPS_CACHE_VERSION: v5-static-native-comp-bootstrap-toolchain
       DEPS_PREFIX: ${{ github.workspace }}/deps
       RELEASE_RETENTION: "21"
       CFLAGS: -flto -g0 -O2
@@ -260,8 +260,10 @@ jobs:
           export PATH="${DEPS_PREFIX}/bin:${PATH}"
           export PKG_CONFIG_PATH="${DEPS_PREFIX}/lib/pkgconfig:${DEPS_PREFIX}/share/pkgconfig"
           export CPPFLAGS="-I${DEPS_PREFIX}/include"
-          export LDFLAGS="-L${DEPS_PREFIX}/lib"
-          export LIBS="-lc++ -lisl -lmpc -lmpfr -lgmp -lz -liconv"
+          libstdcxx_dir=$(dirname "$(find "${DEPS_PREFIX}" -name 'libstdc++.a' -print -quit)")
+          libgcc_dir=$(dirname "$(find "${DEPS_PREFIX}" -name 'libgcc.a' -print -quit)")
+          export LDFLAGS="-L${DEPS_PREFIX}/lib -L${libstdcxx_dir} -L${libgcc_dir}"
+          export LIBS="-lstdc++ -lgcc -lisl -lmpc -lmpfr -lgmp -lz -liconv"
           git clone --depth 1 -b '${{ matrix.branch }}' https://github.com/emacs-mirror/emacs.git '${{ matrix.build_dir }}'
           cd '${{ matrix.build_dir }}' && sed -i '' '/darwin/ s/lncurses/lncursesw/g' configure.ac
           curl -fL -O https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/system-appearance.patch --retry 3
