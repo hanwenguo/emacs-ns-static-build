@@ -1,7 +1,7 @@
 diff --git a/src/comp.c b/src/comp.c
 --- a/src/comp.c
 +++ b/src/comp.c
-@@ -4709,3 +4709,12 @@ add_driver_options (void)
+@@ -4709,3 +4709,13 @@ add_driver_options (void)
  #if defined (LIBGCCJIT_HAVE_gcc_jit_context_add_driver_option)
    load_gccjit_if_necessary (true);
 +#ifdef DARWIN_OS
@@ -12,9 +12,10 @@ diff --git a/src/comp.c b/src/comp.c
 +                         Vinvocation_directory);
 +  Lisp_Object runtime_option = concat2 (build_string ("-L"), runtime_dir);
 +  gcc_jit_context_add_driver_option (comp.ctxt, SSDATA (runtime_option));
++  gcc_jit_context_add_driver_option (comp.ctxt, "-static-libgcc");
 +#endif
    if (!NILP (Fcomp_native_driver_options_effective_p ()))
-@@ -4816,4 +4825,7 @@ DEFUN ("comp--compile-ctxt-to-file0", Fcomp__compile_ctxt_to_file0,
+@@ -4816,4 +4826,7 @@ DEFUN ("comp--compile-ctxt-to-file0", Fcomp__compile_ctxt_to_file0,
 -#endif
 -
 -  comp.speed = XFIXNUM (CALLNI (comp-ctxt-speed, Vcomp_ctxt));

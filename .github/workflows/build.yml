@@ -423,8 +423,12 @@ jobs:
           native_runtime_dir=Emacs.app/Contents/Frameworks/libgccjit
           emutls_archive=$(find "${DEPS_PREFIX}" -name 'libemutls_w.a' -type f -print -quit)
           test -f "${emutls_archive}"
+          gcc_runtime_source_dir=$(dirname "${emutls_archive}")
           mkdir -p "${native_runtime_dir}"
-          cp "${emutls_archive}" "${native_runtime_dir}/"
+          for runtime_archive in libgcc.a libemutls_w.a libheapt_w.a; do
+            test -f "${gcc_runtime_source_dir}/${runtime_archive}"
+            cp "${gcc_runtime_source_dir}/${runtime_archive}" "${native_runtime_dir}/"
+          done
           unexpected_shared_files=$(find Emacs.app \( -type f -o -type l \) \
             \( -name '*.dylib' -o -name '*.so' -o -name '*.so.*' \) -print)
           if [[ -n "${unexpected_shared_files}" ]]; then
