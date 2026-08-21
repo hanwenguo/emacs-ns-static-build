@@ -398,7 +398,8 @@ jobs:
                            --with-sqlite3                   \
                            --prefix="${PWD}/../emacs-install" \
                            ${{ matrix.extra_configure }}; then
-            tail -n 400 config.log
+            grep -n -B 30 -A 120 'gcc_jit_context_acquire' config.log \
+              || tail -n 400 config.log
             exit 1
           fi
           make -j4 && make install
