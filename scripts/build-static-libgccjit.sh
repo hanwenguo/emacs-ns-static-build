@@ -111,11 +111,13 @@ for runtime_archive in libstdc++.a libgcc.a; do
     exit 1
   fi
 done
-find "${DEPS_PREFIX}" -name '*.dylib' -print -delete
-unexpected_dylibs=$(find "${DEPS_PREFIX}" -name '*.dylib' -print)
-if [[ -n "${unexpected_dylibs}" ]]; then
+find "${DEPS_PREFIX}" \( -type f -o -type l \) \
+  \( -name '*.dylib' -o -name '*.so' -o -name '*.so.*' \) -print -delete
+unexpected_shared_libraries=$(find "${DEPS_PREFIX}" \( -type f -o -type l \) \
+  \( -name '*.dylib' -o -name '*.so' -o -name '*.so.*' \) -print)
+if [[ -n "${unexpected_shared_libraries}" ]]; then
   echo "Third-party dynamic libraries were produced:" >&2
-  echo "${unexpected_dylibs}" >&2
+  echo "${unexpected_shared_libraries}" >&2
   exit 1
 fi
 test "${gcc_work_root}" = "${DEPS_PREFIX}/.gcc-work"

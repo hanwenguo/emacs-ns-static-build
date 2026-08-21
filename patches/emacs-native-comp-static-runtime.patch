@@ -1,0 +1,27 @@
+diff --git a/src/comp.c b/src/comp.c
+--- a/src/comp.c
++++ b/src/comp.c
+@@ -4709,3 +4709,12 @@ add_driver_options (void)
+ #if defined (LIBGCCJIT_HAVE_gcc_jit_context_add_driver_option)
+   load_gccjit_if_necessary (true);
++#ifdef DARWIN_OS
++  /* The bundled libemutls_w archive is needed when libgccjit links an
++     .eln file.  Locate it relative to Emacs so an app remains relocatable.  */
++  Lisp_Object runtime_dir
++    = Fexpand_file_name (build_string ("../Frameworks/libgccjit"),
++                         Vinvocation_directory);
++  Lisp_Object runtime_option = concat2 (build_string ("-L"), runtime_dir);
++  gcc_jit_context_add_driver_option (comp.ctxt, SSDATA (runtime_option));
++#endif
+   if (!NILP (Fcomp_native_driver_options_effective_p ()))
+@@ -4816,4 +4825,7 @@ DEFUN ("comp--compile-ctxt-to-file0", Fcomp__compile_ctxt_to_file0,
+-#endif
+-
+-  comp.speed = XFIXNUM (CALLNI (comp-ctxt-speed, Vcomp_ctxt));
++#else
++  gcc_jit_context_set_str_option (comp.ctxt, GCC_JIT_STR_OPTION_PROGNAME,
++                                  "libgccjit");
++#endif
++
++  comp.speed = XFIXNUM (CALLNI (comp-ctxt-speed, Vcomp_ctxt));
+   eassert (comp.speed < INT_MAX);
