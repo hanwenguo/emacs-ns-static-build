@@ -17,6 +17,12 @@ export PATH="${DEPS_PREFIX}/bin:${PATH}"
 export PKG_CONFIG_PATH="${DEPS_PREFIX}/lib/pkgconfig:${DEPS_PREFIX}/share/pkgconfig"
 export CPPFLAGS="-I${DEPS_PREFIX}/include"
 export LDFLAGS="-L${DEPS_PREFIX}/lib"
+# The dependency prefix carries GCC for libgccjit; Emacs itself must still
+# be compiled by the system toolchain.
+export CC=/usr/bin/clang
+export CXX=/usr/bin/clang++
+export OBJC=/usr/bin/clang
+export OBJCXX=/usr/bin/clang++
 
 git clone --depth 1 -b "${EMACS_BRANCH}" https://github.com/emacs-mirror/emacs.git "${BUILD_DIR}"
 cd "${BUILD_DIR}" && sed -i '' '/darwin/ s/lncurses/lncursesw/g' configure.ac
@@ -25,7 +31,8 @@ curl -fL -O https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/mas
 patch -f -V none -p1 < system-appearance.patch
 patch -f -V none -p1 < round-undecorated-frame.patch
 patch -f -V none -p1 < "${script_dir}/../patches/emacs-native-comp-darwin.patch"
-./autogen.sh && ./configure PKG_CONFIG="${DEPS_PREFIX}/bin/pkgconf --static" \
+./autogen.sh
+if ! ./configure PKG_CONFIG="${DEPS_PREFIX}/bin/pkgconf --static" \
                             --disable-build-details          \
                             --disable-gc-mark-trace          \
                             --without-all                    \
@@ -34,6 +41,7 @@ patch -f -V none -p1 < "${script_dir}/../patches/emacs-native-comp-darwin.patch"
                             --with-libgmp                    \
                             --with-gnutls                    \
                             --with-modules                   \
+                            --with-native-compilation=aot    \
                             --with-native-image-api          \
                             --with-ns                        \
                             --with-small-ja-dic              \
@@ -45,9 +53,23 @@ patch -f -V none -p1 < "${script_dir}/../patches/emacs-native-comp-darwin.patch"
                             --with-zlib                      \
                             --with-sqlite3                   \
                             --prefix="${PWD}/../emacs-install" \
-                            ${EXTRA_CONFIGURE}
+                            ${EXTRA_CONFIGURE}; then
+  tail -n 200 config.log
+  exit 1
+fi
 make -j4 && make install
 ditto nextstep/Emacs.app Emacs.app
+# Bundle the GCC runtime archives the embedded driver needs to link .eln
+# files on user machines (see patches/emacs-native-comp-darwin.patch).
+native_runtime_dir=Emacs.app/Contents/Frameworks/libgccjit
+emutls_archive=$(find "${DEPS_PREFIX}" -name 'libemutls_w.a' -type f -print -quit)
+test -f "${emutls_archive}"
+gcc_runtime_source_dir=$(dirname "${emutls_archive}")
+mkdir -p "${native_runtime_dir}"
+for runtime_archive in libgcc.a libemutls_w.a libheapt_w.a; do
+  test -f "${gcc_runtime_source_dir}/${runtime_archive}"
+  cp "${gcc_runtime_source_dir}/${runtime_archive}" "${native_runtime_dir}/"
+done
 # Add command-line helpers used by the packaged apps.
 cat > Emacs.app/Contents/MacOS/bin/emacs << 'EOF'
 #!/bin/bash
