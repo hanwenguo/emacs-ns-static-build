@@ -1,8 +1,9 @@
 #!/bin/bash
 # Verify that a packaged Emacs.app is self-contained: it must ship no
-# third-party dynamic libraries, must link only against system libraries,
-# and must be able to native-compile, load, and run an .eln without any
-# build-machine paths or environment.
+# third-party dynamic libraries and must link only against system
+# libraries.  With NATIVE_COMP=true it must additionally be able to
+# native-compile, load, and run an .eln without any build-machine paths or
+# environment; otherwise native compilation must be absent.
 #
 # Usage: verify-app.sh /path/to/Emacs.app
 #
@@ -14,6 +15,7 @@ set -euo pipefail
 
 app=${1:?usage: verify-app.sh /path/to/Emacs.app}
 test -d "${app}"
+NATIVE_COMP=${NATIVE_COMP:-false}
 
 unexpected_shared_files=$(find "${app}" \( -type f -o -type l \) \
   \( -name '*.dylib' -o -name '*.so' -o -name '*.so.*' \) -print)
@@ -30,6 +32,15 @@ if [[ -n "${non_system_libraries}" ]]; then
   echo "Unexpected non-system dynamic libraries:" >&2
   echo "${non_system_libraries}" >&2
   exit 1
+fi
+
+if [[ "${NATIVE_COMP}" != "true" ]]; then
+  # A build without native compilation must not quietly gain it.
+  test ! -d "${app}/Contents/Frameworks/libgccjit"
+  env HOME="$(mktemp -d)" "${app}/Contents/MacOS/Emacs" --batch --eval \
+    "(when (native-comp-available-p)
+       (error \"native compilation is unexpectedly available\"))"
+  exit 0
 fi
 
 # Native-compilation smoke test, in an environment resembling a user

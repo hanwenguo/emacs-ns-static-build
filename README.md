@@ -39,8 +39,10 @@ optimization possible.
 
 > [!Note]
 > Emacs is built with the GNU MP Bignum Library, GnuTLS, Tree Sitter,
-> XML2 and Zlib.  Native compilation is supported through a statically
-> linked libgccjit built from GCC sources; no third-party dynamic
-> library is included or linked.  Native compilation discovers the
-> active macOS SDK through `xcrun`, so Xcode or the Command Line Tools
-> must be installed for it to work at runtime.
+> XML2 and Zlib.  The emacs-native-comp and igc channels additionally
+> enable native compilation through a statically linked libgccjit built
+> from GCC sources; no third-party dynamic library is included or
+> linked.  Native compilation discovers the active macOS SDK through
+> `xcrun`, so those channels need Xcode or the Command Line Tools
+> installed at runtime.  The master and emacs-31 channels are built
+> without native compilation.
