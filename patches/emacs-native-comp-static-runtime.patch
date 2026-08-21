@@ -1,3 +1,21 @@
+diff --git a/lisp/emacs-lisp/comp.el b/lisp/emacs-lisp/comp.el
+--- a/lisp/emacs-lisp/comp.el
++++ b/lisp/emacs-lisp/comp.el
+@@ -3317,4 +3317,14 @@ Prepare every function for final compilation and drive the C back-end."
+   (let ((dir (file-name-directory name)))
++    ;; GCC records the build machine's SDK path.  Override it with the SDK
++    ;; selected on the machine running this Emacs so downloaded apps remain
++    ;; able to native-compile after Xcode moves or is upgraded.
++    (when (eq system-type 'darwin)
++      (let ((default-directory invocation-directory))
++        (setf (comp-ctxt-driver-options comp-ctxt)
++              (append (list "-isysroot"
++                            (car (process-lines "/usr/bin/xcrun" "--sdk"
++                                                "macosx" "--show-sdk-path")))
++                      (comp-ctxt-driver-options comp-ctxt)))))
+     (comp--finalize-relocs)
+     (maphash (lambda (_ f)
+                (comp--log-func f 1))
 diff --git a/src/comp.c b/src/comp.c
 --- a/src/comp.c
 +++ b/src/comp.c

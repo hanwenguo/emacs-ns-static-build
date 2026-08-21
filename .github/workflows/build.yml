@@ -454,6 +454,7 @@ jobs:
           }
           trap restore_deps EXIT
           env -u CPPFLAGS -u LDFLAGS -u LIBS -u LIBRARY_PATH -u PKG_CONFIG_PATH \
+            -u SDKROOT \
             HOME="${native_comp_home}" \
             PATH='/usr/bin:/bin:/usr/sbin:/sbin' \
             Emacs.app/Contents/MacOS/Emacs --batch --eval \
@@ -466,7 +467,10 @@ jobs:
                       (eln (native-compile source)))
                  (delete-file source)
                  (unless (and eln (file-exists-p eln))
-                   (error \"native compilation produced no .eln file\"))))"
+                   (error \"native compilation produced no .eln file\"))
+                 (load eln nil nil t)
+                 (unless (= (native-comp-smoke) 42)
+                   (error \"native-compiled function returned the wrong value\"))))"
           compiled_eln=$(find "${native_comp_home}" -name 'native-comp-smoke*.eln' -type f -print -quit)
           test -f "${compiled_eln}"
           non_system_eln_libraries=$(otool -L "${compiled_eln}" \

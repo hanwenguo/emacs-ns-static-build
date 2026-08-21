@@ -41,4 +41,5 @@ optimization possible.
 > Emacs is built with the GNU MP Bignum Library, GnuTLS, Tree Sitter,
 > XML2 and Zlib. Native compilation uses an experimental static libgccjit
 > archive built locally from GCC sources; no third-party dynamic library is
-> included or linked.
+> included or linked. It discovers the active macOS SDK through `xcrun` when
+> compiling, so Xcode or the Command Line Tools must be installed.
