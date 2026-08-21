@@ -34,7 +34,7 @@ jobs:
             artifact_prefix: Emacs-igc
             extra_configure: "--with-mps"
     env:
-      DEPS_CACHE_VERSION: v4-toolchain
+      DEPS_CACHE_VERSION: v5-resumable
       DEPS_PREFIX: ${{ github.workspace }}/deps
       RELEASE_RETENTION: "21"
       CFLAGS: -flto -g0 -O2
@@ -92,16 +92,41 @@ jobs:
             } | shasum -a 256 | cut -d ' ' -f1
           )
           echo "fingerprint=${toolchain_fingerprint}" >> "$GITHUB_OUTPUT"
-      - name: Cache dependencies
+      - name: Restore dependencies
         if: steps.check_release.outputs.exists != 'true'
         id: cache-deps
-        uses: actions/cache@v5
+        uses: actions/cache/restore@v5
         with:
           path: ${{ env.DEPS_PREFIX }}
-          key: deps-${{ runner.os }}-${{ runner.arch }}-${{ env.DEPS_CACHE_VERSION }}-${{ steps.dependency-toolchain.outputs.fingerprint }}
+          key: deps-${{ runner.os }}-${{ runner.arch }}-${{ env.DEPS_CACHE_VERSION }}-${{ steps.dependency-toolchain.outputs.fingerprint }}-complete
+          restore-keys: |
+            deps-${{ runner.os }}-${{ runner.arch }}-${{ env.DEPS_CACHE_VERSION }}-${{ steps.dependency-toolchain.outputs.fingerprint }}-partial-
+      - name: Check dependency cache
+        if: steps.check_release.outputs.exists != 'true'
+        id: dependency-cache
+        run: |
+          if [[ -f "${DEPS_PREFIX}/.built" ]]; then
+            echo 'complete=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'complete=false' >> "$GITHUB_OUTPUT"
+          fi
       - name: Build dependencies
-        if: steps.check_release.outputs.exists != 'true' && steps.cache-deps.outputs.cache-hit != 'true'
+        if: steps.check_release.outputs.exists != 'true' && steps.dependency-cache.outputs.complete != 'true'
+        id: build-deps
+        timeout-minutes: 300
         run: bash scripts/build-deps.sh
+      - name: Save partial dependency cache
+        if: always() && steps.build-deps.outcome == 'failure'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.DEPS_PREFIX }}
+          key: deps-${{ runner.os }}-${{ runner.arch }}-${{ env.DEPS_CACHE_VERSION }}-${{ steps.dependency-toolchain.outputs.fingerprint }}-partial-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Save complete dependency cache
+        if: steps.check_release.outputs.exists != 'true' && steps.dependency-cache.outputs.complete != 'true' && steps.build-deps.outcome == 'success'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.DEPS_PREFIX }}
+          key: ${{ steps.cache-deps.outputs.cache-primary-key }}
       - name: Build Emacs
         if: steps.check_release.outputs.exists != 'true'
         env:
