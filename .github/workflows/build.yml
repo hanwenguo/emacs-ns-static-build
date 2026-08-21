@@ -214,6 +214,8 @@ jobs:
           TARBALL: ${{ matrix.tarball }}
           EXTRA_CONFIGURE: ${{ matrix.extra_configure }}
         run: bash scripts/build-emacs.sh
+      - name: Verify packaged app
+        run: bash scripts/verify-app.sh '${{ matrix.build_dir }}/Emacs.app'
       - name: Upload test artifact
         if: needs.plan.outputs.publish != 'true'
         uses: actions/upload-artifact@v4
