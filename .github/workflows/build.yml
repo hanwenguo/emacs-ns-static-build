@@ -126,7 +126,7 @@ jobs:
     if: needs.plan.outputs.any == 'true'
     runs-on: macos-26
     env:
-      DEPS_CACHE_VERSION: v6-native-comp
+      DEPS_CACHE_VERSION: v7-gcc-16.2
       DEPS_PREFIX: ${{ github.workspace }}/deps
       CFLAGS: -flto -g0 -O2
     outputs:
