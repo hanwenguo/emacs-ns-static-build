@@ -2,72 +2,127 @@ name: MacOS Build for GNU Emacs
 
 on:
   workflow_dispatch:
+    inputs:
+      test_build:
+        description: Build without publishing; upload tarballs as artifacts
+        required: false
+        default: false
+        type: boolean
+      channels:
+        description: Comma-separated channels to build (empty = all)
+        required: false
+        default: ""
+        type: string
   schedule:
     - cron: "0 0,12,18 * * *"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build:
-    runs-on: macos-26
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: master
-            branch: master
-            build_dir: emacs-master
-            tarball: Emacs-master.tar.xz
-            artifact_prefix: Emacs-master
-            extra_configure: ""
-          - name: emacs-31
-            branch: emacs-31
-            build_dir: emacs
-            tarball: Emacs.tar.xz
-            artifact_prefix: Emacs
-            extra_configure: ""
-          - name: igc
-            branch: feature/igc3
-            build_dir: emacs-igc
-            tarball: Emacs-igc.tar.xz
-            artifact_prefix: Emacs-igc
-            extra_configure: "--with-mps"
-    env:
-      DEPS_CACHE_VERSION: v4-toolchain
-      DEPS_PREFIX: ${{ github.workspace }}/deps
-      RELEASE_RETENTION: "21"
-      CFLAGS: -flto -g0 -O2
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      any: ${{ steps.plan.outputs.any }}
+      publish: ${{ steps.plan.outputs.publish }}
     steps:
-      - name: Get upstream commit hash
-        id: get_commit
-        run: |
-          COMMIT_HASH=$(git ls-remote https://github.com/emacs-mirror/emacs.git refs/heads/${{ matrix.branch }} | cut -f1)
-          echo "commit_hash=${COMMIT_HASH}" >> $GITHUB_OUTPUT
-          echo "short_hash=${COMMIT_HASH:0:7}" >> $GITHUB_OUTPUT
-          echo "tag=${{ matrix.name }}-${COMMIT_HASH:0:7}" >> $GITHUB_OUTPUT
-      - name: Check if release exists
-        id: check_release
+      - name: Determine channels to build
+        id: plan
         uses: actions/github-script@v9
         with:
           script: |
-            const tag = "${{ steps.get_commit.outputs.tag }}";
+            const channels = [
+              {
+                name: "master",
+                branch: "master",
+                build_dir: "emacs-master",
+                tarball: "Emacs-master.tar.xz",
+                artifact_prefix: "Emacs-master",
+                extra_configure: "",
+              },
+              {
+                name: "emacs-31",
+                branch: "emacs-31",
+                build_dir: "emacs",
+                tarball: "Emacs.tar.xz",
+                artifact_prefix: "Emacs",
+                extra_configure: "",
+              },
+              {
+                name: "igc",
+                branch: "feature/igc3",
+                build_dir: "emacs-igc",
+                tarball: "Emacs-igc.tar.xz",
+                artifact_prefix: "Emacs-igc",
+                extra_configure: "--with-mps",
+              },
+            ];
             const { owner, repo } = context.repo;
-            try {
-              await github.rest.repos.getReleaseByTag({ owner, repo, tag });
-              core.setOutput("exists", "true");
-            } catch (error) {
-              if (error.status === 404) {
-                core.setOutput("exists", "false");
-                return;
-              }
-              throw error;
+            const testBuild = context.eventName === "workflow_dispatch"
+              && context.payload.inputs?.test_build === "true";
+            const channelFilter = (context.payload.inputs?.channels ?? "")
+              .split(",")
+              .map((name) => name.trim())
+              .filter(Boolean);
+            const unknown = channelFilter.filter(
+              (name) => !channels.some((channel) => channel.name === name));
+            if (unknown.length > 0) {
+              throw new Error(`Unknown channels: ${unknown.join(", ")}`);
             }
+            const include = [];
+            for (const channel of channels) {
+              if (channelFilter.length > 0 && !channelFilter.includes(channel.name)) {
+                continue;
+              }
+              const lsRemote = await exec.getExecOutput("git", [
+                "ls-remote",
+                "https://github.com/emacs-mirror/emacs.git",
+                `refs/heads/${channel.branch}`,
+              ]);
+              const commitHash = lsRemote.stdout.split("\t")[0].trim();
+              if (!/^[0-9a-f]{40}$/.test(commitHash)) {
+                throw new Error(`Could not resolve ${channel.branch}: ${lsRemote.stdout}`);
+              }
+              const tag = `${channel.name}-${commitHash.slice(0, 7)}`;
+              if (!testBuild) {
+                let exists = false;
+                try {
+                  await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+                  exists = true;
+                } catch (error) {
+                  if (error.status !== 404) throw error;
+                }
+                if (exists) {
+                  core.info(`Release ${tag} already exists; skipping ${channel.name}.`);
+                  continue;
+                }
+              }
+              include.push({
+                ...channel,
+                commit_hash: commitHash,
+                short_hash: commitHash.slice(0, 7),
+                tag,
+              });
+            }
+            core.setOutput("matrix", JSON.stringify(include));
+            core.setOutput("any", include.length > 0 ? "true" : "false");
+            const publish = !testBuild && context.ref === "refs/heads/main";
+            core.setOutput("publish", publish ? "true" : "false");
+  deps:
+    needs: plan
+    if: needs.plan.outputs.any == 'true'
+    runs-on: macos-26
+    env:
+      DEPS_CACHE_VERSION: v5-resumable
+      DEPS_PREFIX: ${{ github.workspace }}/deps
+      CFLAGS: -flto -g0 -O2
+    outputs:
+      cache-key: ${{ steps.cache-deps.outputs.cache-primary-key }}
+    steps:
       - name: Checkout build scripts
-        if: steps.check_release.outputs.exists != 'true'
         uses: actions/checkout@v5
       - name: Uninstall Homebrew
-        if: steps.check_release.outputs.exists != 'true'
         run: |
           curl -fO https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh --retry 3
           sudo chmod +x uninstall.sh
@@ -75,11 +130,7 @@ jobs:
           sudo rm -rf /opt/homebrew
           export PATH=''
           eval $(/usr/libexec/path_helper -s)
-      - name: Add dependency bin to PATH
-        if: steps.check_release.outputs.exists != 'true'
-        run: echo "${DEPS_PREFIX}/bin" >> $GITHUB_PATH
       - name: Identify dependency toolchain
-        if: steps.check_release.outputs.exists != 'true'
         id: dependency-toolchain
         run: |
           set -euo pipefail
@@ -92,192 +143,100 @@ jobs:
             } | shasum -a 256 | cut -d ' ' -f1
           )
           echo "fingerprint=${toolchain_fingerprint}" >> "$GITHUB_OUTPUT"
-      - name: Cache dependencies
-        if: steps.check_release.outputs.exists != 'true'
+      - name: Restore dependencies
         id: cache-deps
-        uses: actions/cache@v5
+        uses: actions/cache/restore@v5
         with:
           path: ${{ env.DEPS_PREFIX }}
-          key: deps-${{ runner.os }}-${{ runner.arch }}-${{ env.DEPS_CACHE_VERSION }}-${{ steps.dependency-toolchain.outputs.fingerprint }}
+          key: deps-${{ runner.os }}-${{ runner.arch }}-${{ env.DEPS_CACHE_VERSION }}-${{ steps.dependency-toolchain.outputs.fingerprint }}-complete
+          restore-keys: |
+            deps-${{ runner.os }}-${{ runner.arch }}-${{ env.DEPS_CACHE_VERSION }}-${{ steps.dependency-toolchain.outputs.fingerprint }}-partial-
+      - name: Check dependency cache
+        id: dependency-cache
+        run: |
+          if [[ -f "${DEPS_PREFIX}/.built" ]]; then
+            echo 'complete=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'complete=false' >> "$GITHUB_OUTPUT"
+          fi
       - name: Build dependencies
-        if: steps.check_release.outputs.exists != 'true' && steps.cache-deps.outputs.cache-hit != 'true'
+        if: steps.dependency-cache.outputs.complete != 'true'
+        id: build-deps
+        timeout-minutes: 300
+        run: bash scripts/build-deps.sh
+      - name: Save partial dependency cache
+        if: always() && steps.build-deps.outcome == 'failure'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.DEPS_PREFIX }}
+          key: deps-${{ runner.os }}-${{ runner.arch }}-${{ env.DEPS_CACHE_VERSION }}-${{ steps.dependency-toolchain.outputs.fingerprint }}-partial-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Save complete dependency cache
+        if: steps.dependency-cache.outputs.complete != 'true' && steps.build-deps.outcome == 'success'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.DEPS_PREFIX }}
+          key: ${{ steps.cache-deps.outputs.cache-primary-key }}
+  build:
+    needs: [plan, deps]
+    if: needs.plan.outputs.any == 'true'
+    runs-on: macos-26
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      DEPS_PREFIX: ${{ github.workspace }}/deps
+      RELEASE_RETENTION: "21"
+      CFLAGS: -flto -g0 -O2
+    steps:
+      - name: Checkout build scripts
+        uses: actions/checkout@v5
+      - name: Uninstall Homebrew
         run: |
-          set -euo pipefail
-          export PATH="${DEPS_PREFIX}/bin:${PATH}"
-          export PKG_CONFIG_PATH="${DEPS_PREFIX}/lib/pkgconfig:${DEPS_PREFIX}/share/pkgconfig"
-          export CPPFLAGS="-I${DEPS_PREFIX}/include"
-          export LDFLAGS="-L${DEPS_PREFIX}/lib"
-          mkdir -p "${DEPS_PREFIX}"
-          curl -fLO https://ftpmirror.gnu.org/gnu/m4/m4-1.4.21.tar.xz --retry 3
-          tar -Jxf m4-1.4.21.tar.xz && cd m4-1.4.21
-          ./configure --prefix="${DEPS_PREFIX}" && make -j4
-          make install
-          cd ..
-          curl -fLO https://ftpmirror.gnu.org/gnu/autoconf/autoconf-2.73.tar.xz --retry 3
-          tar -Jxf autoconf-2.73.tar.xz && cd autoconf-2.73
-          ./configure --prefix="${DEPS_PREFIX}" && make -j4
-          make install
-          cd ..
-          curl -fLO https://ftpmirror.gnu.org/gnu/automake/automake-1.18.1.tar.xz --retry 3
-          tar -Jxf automake-1.18.1.tar.xz && cd automake-1.18.1
-          ./configure --prefix="${DEPS_PREFIX}" && make -j4
-          make install
-          cd ..
-          curl -fLO https://ftpmirror.gnu.org/gnu/libtool/libtool-2.6.2.tar.xz --retry 3
-          tar -Jxf libtool-2.6.2.tar.xz && cd libtool-2.6.2
-          ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
-          make install
-          cd ..
-          curl -fLO https://github.com/pkgconf/pkgconf/archive/refs/tags/pkgconf-3.0.3.tar.gz --retry 3
-          tar -zxf pkgconf-3.0.3.tar.gz && cd pkgconf-pkgconf-3.0.3
-          ./autogen.sh && ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
-          make install
-          ln -sf "${DEPS_PREFIX}/bin/pkgconf" "${DEPS_PREFIX}/bin/pkg-config"
-          cd ..
-          curl -fLO https://ftpmirror.gnu.org/gnu/texinfo/texinfo-7.3.tar.xz --retry 3
-          tar -Jxf texinfo-7.3.tar.xz && cd texinfo-7.3
-          ./configure --prefix="${DEPS_PREFIX}" && make -j4
-          make install
-          cd ..
-          curl -fLO https://ftpmirror.gnu.org/gnu/libiconv/libiconv-1.19.tar.gz --retry 3
-          tar -zxf libiconv-1.19.tar.gz && cd libiconv-1.19
-          ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
-          make install
-          cd ..
-          curl -fLO https://ftpmirror.gnu.org/gnu/libunistring/libunistring-1.4.2.tar.xz --retry 3
-          tar -Jxf libunistring-1.4.2.tar.xz && cd libunistring-1.4.2
-          ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
-          make install
-          cd ..
-          curl -fLO https://ftpmirror.gnu.org/gnu/gettext/gettext-1.0.tar.xz --retry 3
-          tar -Jxf gettext-1.0.tar.xz && cd gettext-1.0
-          ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
-          make install
-          cd ..
-          curl -fLO https://ftpmirror.gnu.org/gnu/ncurses/ncurses-6.6.tar.gz --retry 3
-          tar -zxf ncurses-6.6.tar.gz && cd ncurses-6.6
-          ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
-          make install
-          ln -sf "${DEPS_PREFIX}/include/ncursesw/curses.h" "${DEPS_PREFIX}/include/ncurses.h"
-          cd ..
-          curl -fLO https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.xz --retry 3
-          tar -Jxf zlib-1.3.2.tar.xz && cd zlib-1.3.2
-          ./configure --static --prefix="${DEPS_PREFIX}" && make -j4
-          make install
-          cd ..
-          curl -fO https://download.gnome.org/sources/libxml2/2.15/libxml2-2.15.3.tar.xz --retry 3
-          tar -Jxf libxml2-2.15.3.tar.xz && cd libxml2-2.15.3
-          ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
-          make install
-          cd ..
-          curl -fLO https://ftpmirror.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz --retry 3
-          tar -Jxf gmp-6.3.0.tar.xz && cd gmp-6.3.0
-          ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
-          make install
-          cd ..
-          curl -fLO https://ftpmirror.gnu.org/gnu/nettle/nettle-4.0.tar.gz --retry 3
-          tar -zxf nettle-4.0.tar.gz && cd nettle-4.0
-          ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
-          make install
-          cd ..
-          curl -fLO https://ftpmirror.gnu.org/gnu/libidn/libidn2-2.3.8.tar.gz --retry 3
-          tar -zxf libidn2-2.3.8.tar.gz && cd libidn2-2.3.8
-          ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
-          make install
-          cd ..
-          curl -fO https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.13.tar.xz --retry 3
-          tar -Jxf gnutls-3.8.13.tar.xz && cd gnutls-3.8.13
-          ./configure --prefix="${DEPS_PREFIX}" --disable-shared --with-included-libtasn1 --without-p11-kit && make -j4
-          make install
-          cd ..
-          curl -fLO https://github.com/tree-sitter/tree-sitter/archive/refs/tags/v0.26.11.tar.gz --retry 3
-          tar -zxf v0.26.11.tar.gz && cd tree-sitter-0.26.11
-          make -j4
-          make install PREFIX="${DEPS_PREFIX}"
-          find "${DEPS_PREFIX}/lib" -name 'libtree-sitter*.dylib' -delete
-          cd ..
-          curl -fO https://www.sqlite.org/2026/sqlite-autoconf-3530100.tar.gz --retry 3
-          tar -zxf sqlite-autoconf-3530100.tar.gz && cd sqlite-autoconf-3530100
-          ./configure --prefix="${DEPS_PREFIX}" --disable-shared && make -j4
-          make install
-          cd ..
-          curl -fLO https://ftpmirror.gnu.org/gnu/gzip/gzip-1.14.tar.xz --retry 3
-          tar -Jxf gzip-1.14.tar.xz && cd gzip-1.14
-          ./configure --prefix="${DEPS_PREFIX}" && make -j4
-          make install
-          touch "${DEPS_PREFIX}/.built"
+          curl -fO https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh --retry 3
+          sudo chmod +x uninstall.sh
+          sudo env NONINTERACTIVE=1 ./uninstall.sh
+          sudo rm -rf /opt/homebrew
+          export PATH=''
+          eval $(/usr/libexec/path_helper -s)
+      - name: Restore dependencies
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ env.DEPS_PREFIX }}
+          key: ${{ needs.deps.outputs.cache-key }}
+          fail-on-cache-miss: true
       - name: Build Emacs
-        if: steps.check_release.outputs.exists != 'true'
-        run: |
-          set -euo pipefail
-          export PATH="${DEPS_PREFIX}/bin:${PATH}"
-          export PKG_CONFIG_PATH="${DEPS_PREFIX}/lib/pkgconfig:${DEPS_PREFIX}/share/pkgconfig"
-          export CPPFLAGS="-I${DEPS_PREFIX}/include"
-          export LDFLAGS="-L${DEPS_PREFIX}/lib"
-          git clone --depth 1 -b '${{ matrix.branch }}' https://github.com/emacs-mirror/emacs.git '${{ matrix.build_dir }}'
-          cd '${{ matrix.build_dir }}' && sed -i '' '/darwin/ s/lncurses/lncursesw/g' configure.ac
-          curl -fL -O https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/system-appearance.patch --retry 3
-          curl -fL -O https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/round-undecorated-frame.patch --retry 3
-          patch -f -V none -p1 < system-appearance.patch
-          patch -f -V none -p1 < round-undecorated-frame.patch
-          ./autogen.sh && ./configure PKG_CONFIG="${DEPS_PREFIX}/bin/pkgconf --static" \
-                                      --disable-build-details          \
-                                      --disable-gc-mark-trace          \
-                                      --without-all                    \
-                                      --with-compress-install          \
-                                      --with-file-notification=kqueue  \
-                                      --with-libgmp                    \
-                                      --with-gnutls                    \
-                                      --with-modules                   \
-                                      --with-native-image-api          \
-                                      --with-ns                        \
-                                      --with-small-ja-dic              \
-                                      --with-threads                   \
-                                      --with-toolkit-scroll-bars       \
-                                      --with-tree-sitter               \
-                                      --with-xwidgets                  \
-                                      --with-xml2                      \
-                                      --with-zlib                      \
-                                      --with-sqlite3                   \
-                                      --prefix="${PWD}/../emacs-install" \
-                                      ${{ matrix.extra_configure }}
-          make -j4 && make install
-          ditto nextstep/Emacs.app Emacs.app
-          # Add command-line helpers used by the packaged apps.
-          cat > Emacs.app/Contents/MacOS/bin/emacs << 'EOF'
-          #!/bin/bash
-          exec /Applications/Emacs.app/Contents/MacOS/Emacs "$@"
-          EOF
-          chmod +x Emacs.app/Contents/MacOS/bin/emacs
-          # Replace app icon
-          curl -fLO https://github.com/jimeh/emacs-liquid-glass-icons/raw/refs/heads/main/Resources/EmacsLG3-Default.icns --retry 3
-          mv EmacsLG3-Default.icns Emacs.app/Contents/Resources/Emacs.icns
-          curl -fLO https://github.com/jimeh/emacs-liquid-glass-icons/raw/refs/heads/main/Resources/Assets.car --retry 3
-          mv Assets.car Emacs.app/Contents/Resources/Assets.car
-          plutil -replace CFBundleIconName -string EmacsLG3 Emacs.app/Contents/Info.plist
-          touch Emacs.app
-          ARTIFACT_VERSION=$(Emacs.app/Contents/MacOS/Emacs --version | sed -nE 's/^GNU Emacs ([0-9.]+).*/\1/p')
-          echo "ARTIFACT_VERSION=${ARTIFACT_VERSION}" >> $GITHUB_ENV
-          bash "${GITHUB_WORKSPACE}/scripts/create-emacs-client-app.sh" \
-            --emacs-app Emacs.app \
-            --client-app "Emacs Client.app" \
-            --version "${ARTIFACT_VERSION}"
-          codesign --force --deep -s - Emacs.app
-          codesign --force --deep -s - "Emacs Client.app"
-          tar -Jcf '${{ matrix.tarball }}' Emacs.app "Emacs Client.app"
+        env:
+          EMACS_BRANCH: ${{ matrix.branch }}
+          BUILD_DIR: ${{ matrix.build_dir }}
+          TARBALL: ${{ matrix.tarball }}
+          EXTRA_CONFIGURE: ${{ matrix.extra_configure }}
+        run: bash scripts/build-emacs.sh
+      - name: Verify packaged app
+        run: bash scripts/verify-app.sh '${{ matrix.build_dir }}/Emacs.app'
+      - name: Upload test artifact
+        if: needs.plan.outputs.publish != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_prefix }}-${{ env.ARTIFACT_VERSION }}-${{ matrix.short_hash }}
+          path: ${{ matrix.build_dir }}/${{ matrix.tarball }}
+          if-no-files-found: error
+          compression-level: 0
       - name: Publish release
-        if: steps.check_release.outputs.exists != 'true'
+        if: needs.plan.outputs.publish == 'true'
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ steps.get_commit.outputs.tag }}
-          name: Emacs ${{ matrix.name }} ${{ env.ARTIFACT_VERSION }} (${{ steps.get_commit.outputs.short_hash }})
+          tag_name: ${{ matrix.tag }}
+          name: Emacs ${{ matrix.name }} ${{ env.ARTIFACT_VERSION }} (${{ matrix.short_hash }})
           body: |
-            Upstream: https://github.com/emacs-mirror/emacs/commit/${{ steps.get_commit.outputs.commit_hash }}
+            Upstream: https://github.com/emacs-mirror/emacs/commit/${{ matrix.commit_hash }}
             Branch: ${{ matrix.branch }}
             Emacs version: ${{ env.ARTIFACT_VERSION }}
           files: ${{ matrix.build_dir }}/${{ matrix.tarball }}
       - name: Delete older releases for branch
-        if: steps.check_release.outputs.exists != 'true'
+        if: needs.plan.outputs.publish == 'true'
         uses: actions/github-script@v9
         with:
           script: |
