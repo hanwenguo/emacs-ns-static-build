@@ -502,6 +502,14 @@ jobs:
           codesign --force --deep -s - Emacs.app
           codesign --force --deep -s - "Emacs Client.app"
           tar -Jcf '${{ matrix.tarball }}' Emacs.app "Emacs Client.app"
+      - name: Upload test artifact
+        if: steps.select.outputs.run == 'true' && steps.check_release.outputs.exists != 'true' && github.event_name == 'workflow_dispatch' && inputs.test_build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_prefix }}-${{ env.ARTIFACT_VERSION }}-${{ steps.get_commit.outputs.short_hash }}
+          path: ${{ matrix.build_dir }}/${{ matrix.tarball }}
+          if-no-files-found: error
+          compression-level: 0
       - name: Publish release
         if: steps.select.outputs.run == 'true' && steps.check_release.outputs.exists != 'true' && !(github.event_name == 'workflow_dispatch' && inputs.test_build)
         uses: softprops/action-gh-release@v3
