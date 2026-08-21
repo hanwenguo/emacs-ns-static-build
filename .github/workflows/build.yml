@@ -378,7 +378,8 @@ jobs:
           patch -f -V none -p1 < system-appearance.patch
           patch -f -V none -p1 < round-undecorated-frame.patch
           ./autogen.sh
-          if ! ./configure PKG_CONFIG="${DEPS_PREFIX}/bin/pkgconf --static" \
+          if ! ./configure ac_cv_search___gmpz_roinit_n=-lgmp \
+                           PKG_CONFIG="${DEPS_PREFIX}/bin/pkgconf --static" \
                            --disable-build-details          \
                            --disable-gc-mark-trace          \
                            --without-all                    \
