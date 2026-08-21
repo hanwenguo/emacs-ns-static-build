@@ -1,0 +1,31 @@
+diff --git a/gcc/jit/Make-lang.in b/gcc/jit/Make-lang.in
+--- a/gcc/jit/Make-lang.in
++++ b/gcc/jit/Make-lang.in
+@@ -74,0 +75 @@
++LIBGCCJIT_STATIC_FILENAME = $(LIBGCCJIT_BASENAME).a
+@@ -92,0 +94 @@
++	$(LIBGCCJIT_STATIC_FILENAME) \
+@@ -128 +130 @@
+-jit.serial = $(LIBGCCJIT_FILENAME)
++jit.serial = $(LIBGCCJIT_FILENAME) $(LIBGCCJIT_STATIC_FILENAME)
+@@ -195,0 +198,13 @@
++
++ifneq (,$(findstring darwin,$(host)))
++$(LIBGCCJIT_STATIC_FILENAME): $(jit_OBJS) \
++	libbackend.a libcommon-target.a libcommon.a \
++	$(CPPLIB) $(LIBDECNUMBER) \
++	$(LIBDEPS) $(srcdir)/jit/libgccjit.map \
++	$(EXTRA_GCC_OBJS_EXCLUSIVE) $(jit.prev)
++	rm -f $@
++	/usr/bin/libtool -static -o $@ \
++	     $(jit_OBJS) libbackend.a libcommon-target.a libcommon.a \
++	     $(CPPLIB) $(LIBDECNUMBER) $(LIBBACKTRACE) $(LIBIBERTY) \
++	     $(EXTRA_GCC_OBJS_EXCLUSIVE)
++endif
+@@ -399,0 +415,2 @@
++	$(INSTALL_DATA) $(LIBGCCJIT_STATIC_FILENAME) \
++	  $(DESTDIR)$(libdir)/$(LIBGCCJIT_STATIC_FILENAME)
+@@ -429 +446,2 @@
+-	-rm -f $(LIBGCCJIT_FILENAME) $(LIBGCCJIT_SYMLINK)
++	-rm -f $(LIBGCCJIT_FILENAME) $(LIBGCCJIT_STATIC_FILENAME) \
++	  $(LIBGCCJIT_SYMLINK)
