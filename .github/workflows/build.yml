@@ -79,19 +79,16 @@ jobs:
             }
             core.setOutput("matrix", JSON.stringify(include));
             core.setOutput("any", include.length > 0 ? "true" : "false");
-  build:
+  deps:
     needs: plan
     if: needs.plan.outputs.any == 'true'
     runs-on: macos-26
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       DEPS_CACHE_VERSION: v5-resumable
       DEPS_PREFIX: ${{ github.workspace }}/deps
-      RELEASE_RETENTION: "21"
       CFLAGS: -flto -g0 -O2
+    outputs:
+      cache-key: ${{ steps.cache-deps.outputs.cache-primary-key }}
     steps:
       - name: Checkout build scripts
         uses: actions/checkout@v5
@@ -103,8 +100,6 @@ jobs:
           sudo rm -rf /opt/homebrew
           export PATH=''
           eval $(/usr/libexec/path_helper -s)
-      - name: Add dependency bin to PATH
-        run: echo "${DEPS_PREFIX}/bin" >> $GITHUB_PATH
       - name: Identify dependency toolchain
         id: dependency-toolchain
         run: |
@@ -151,6 +146,35 @@ jobs:
         with:
           path: ${{ env.DEPS_PREFIX }}
           key: ${{ steps.cache-deps.outputs.cache-primary-key }}
+  build:
+    needs: [plan, deps]
+    if: needs.plan.outputs.any == 'true'
+    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      DEPS_PREFIX: ${{ github.workspace }}/deps
+      RELEASE_RETENTION: "21"
+      CFLAGS: -flto -g0 -O2
+    steps:
+      - name: Checkout build scripts
+        uses: actions/checkout@v5
+      - name: Uninstall Homebrew
+        run: |
+          curl -fO https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh --retry 3
+          sudo chmod +x uninstall.sh
+          sudo env NONINTERACTIVE=1 ./uninstall.sh
+          sudo rm -rf /opt/homebrew
+          export PATH=''
+          eval $(/usr/libexec/path_helper -s)
+      - name: Restore dependencies
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ env.DEPS_PREFIX }}
+          key: ${{ needs.deps.outputs.cache-key }}
+          fail-on-cache-miss: true
       - name: Build Emacs
         env:
           EMACS_BRANCH: ${{ matrix.branch }}
