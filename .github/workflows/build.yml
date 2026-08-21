@@ -2,11 +2,22 @@ name: MacOS Build for GNU Emacs
 
 on:
   workflow_dispatch:
+    inputs:
+      test_build:
+        description: Build without publishing; upload tarballs as artifacts
+        required: false
+        default: false
+        type: boolean
+      channels:
+        description: Comma-separated channels to build (empty = all)
+        required: false
+        default: ""
+        type: string
   schedule:
     - cron: "0 0,12,18 * * *"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   plan:
@@ -14,6 +25,7 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       any: ${{ steps.plan.outputs.any }}
+      publish: ${{ steps.plan.outputs.publish }}
     steps:
       - name: Determine channels to build
         id: plan
@@ -47,8 +59,22 @@ jobs:
               },
             ];
             const { owner, repo } = context.repo;
+            const testBuild = context.eventName === "workflow_dispatch"
+              && context.payload.inputs?.test_build === "true";
+            const channelFilter = (context.payload.inputs?.channels ?? "")
+              .split(",")
+              .map((name) => name.trim())
+              .filter(Boolean);
+            const unknown = channelFilter.filter(
+              (name) => !channels.some((channel) => channel.name === name));
+            if (unknown.length > 0) {
+              throw new Error(`Unknown channels: ${unknown.join(", ")}`);
+            }
             const include = [];
             for (const channel of channels) {
+              if (channelFilter.length > 0 && !channelFilter.includes(channel.name)) {
+                continue;
+              }
               const lsRemote = await exec.getExecOutput("git", [
                 "ls-remote",
                 "https://github.com/emacs-mirror/emacs.git",
@@ -59,16 +85,18 @@ jobs:
                 throw new Error(`Could not resolve ${channel.branch}: ${lsRemote.stdout}`);
               }
               const tag = `${channel.name}-${commitHash.slice(0, 7)}`;
-              let exists = false;
-              try {
-                await github.rest.repos.getReleaseByTag({ owner, repo, tag });
-                exists = true;
-              } catch (error) {
-                if (error.status !== 404) throw error;
-              }
-              if (exists) {
-                core.info(`Release ${tag} already exists; skipping ${channel.name}.`);
-                continue;
+              if (!testBuild) {
+                let exists = false;
+                try {
+                  await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+                  exists = true;
+                } catch (error) {
+                  if (error.status !== 404) throw error;
+                }
+                if (exists) {
+                  core.info(`Release ${tag} already exists; skipping ${channel.name}.`);
+                  continue;
+                }
               }
               include.push({
                 ...channel,
@@ -79,6 +107,8 @@ jobs:
             }
             core.setOutput("matrix", JSON.stringify(include));
             core.setOutput("any", include.length > 0 ? "true" : "false");
+            const publish = !testBuild && context.ref === "refs/heads/main";
+            core.setOutput("publish", publish ? "true" : "false");
   deps:
     needs: plan
     if: needs.plan.outputs.any == 'true'
@@ -150,6 +180,8 @@ jobs:
     needs: [plan, deps]
     if: needs.plan.outputs.any == 'true'
     runs-on: macos-26
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -182,7 +214,16 @@ jobs:
           TARBALL: ${{ matrix.tarball }}
           EXTRA_CONFIGURE: ${{ matrix.extra_configure }}
         run: bash scripts/build-emacs.sh
+      - name: Upload test artifact
+        if: needs.plan.outputs.publish != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_prefix }}-${{ env.ARTIFACT_VERSION }}-${{ matrix.short_hash }}
+          path: ${{ matrix.build_dir }}/${{ matrix.tarball }}
+          if-no-files-found: error
+          compression-level: 0
       - name: Publish release
+        if: needs.plan.outputs.publish == 'true'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ matrix.tag }}
@@ -193,6 +234,7 @@ jobs:
             Emacs version: ${{ env.ARTIFACT_VERSION }}
           files: ${{ matrix.build_dir }}/${{ matrix.tarball }}
       - name: Delete older releases for branch
+        if: needs.plan.outputs.publish == 'true'
         uses: actions/github-script@v9
         with:
           script: |
