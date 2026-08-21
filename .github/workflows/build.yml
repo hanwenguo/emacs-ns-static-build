@@ -391,7 +391,7 @@ jobs:
                            --with-libgmp                    \
                            --with-gnutls                    \
                            --with-modules                   \
-                           --with-native-compilation=yes    \
+                           --with-native-compilation=aot    \
                            --with-native-image-api          \
                            --with-ns                        \
                            --with-small-ja-dic              \
