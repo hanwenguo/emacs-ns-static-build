@@ -24,6 +24,7 @@ curl -fL -O https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/mas
 curl -fL -O https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/round-undecorated-frame.patch --retry 3
 patch -f -V none -p1 < system-appearance.patch
 patch -f -V none -p1 < round-undecorated-frame.patch
+patch -f -V none -p1 < "${script_dir}/../patches/emacs-native-comp-darwin.patch"
 ./autogen.sh && ./configure PKG_CONFIG="${DEPS_PREFIX}/bin/pkgconf --static" \
                             --disable-build-details          \
                             --disable-gc-mark-trace          \
