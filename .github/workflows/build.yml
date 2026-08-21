@@ -405,6 +405,16 @@ jobs:
               || tail -n 400 config.log
             exit 1
           fi
+          allocator_symbols=$(mktemp)
+          trap 'rm -f "${allocator_symbols}"' EXIT
+          printf '%s\n' _xmalloc _xcalloc _xrealloc > "${allocator_symbols}"
+          /usr/bin/nmedit -D -R "${allocator_symbols}" "${DEPS_PREFIX}/lib/libgccjit.a"
+          if /usr/bin/nm -gU "${DEPS_PREFIX}/lib/libgccjit.a" \
+               | awk '{ print $NF }' \
+               | grep -Fxf "${allocator_symbols}"; then
+            echo "libgccjit allocator symbols remain globally visible" >&2
+            exit 1
+          fi
           make -j4 && make install
           ditto nextstep/Emacs.app Emacs.app
           non_system_libraries=$(otool -L Emacs.app/Contents/MacOS/Emacs \
