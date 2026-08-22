@@ -14,19 +14,21 @@ installed at `/Applications/Emacs.app`. This feature is taken from
 
 ## Homebrew
 
-The three build channels are available from the personal tap:
+The four build channels are available from the personal tap:
 
 ```sh
-brew install --cask --no-quarantine hanwenguo/tap/emacs-ns-static
-brew install --cask --no-quarantine hanwenguo/tap/emacs-ns-static-master
-brew install --cask --no-quarantine hanwenguo/tap/emacs-ns-static-igc
+brew install --cask hanwenguo/tap/emacs-ns-static
+brew install --cask hanwenguo/tap/emacs-ns-static@master
+brew install --cask hanwenguo/tap/emacs-ns-static-native-comp
+brew install --cask hanwenguo/tap/emacs-ns-static-native-comp@igc
 ```
 
-The apps are ad-hoc signed rather than notarized by Apple. Using
-`--no-quarantine` is an explicit decision to trust these builds; Homebrew still
-verifies each release archive against the checksum recorded in the tap. Only
-one channel can be installed at a time because all three provide `Emacs.app`,
-`Emacs Client.app`, and the same command-line tools.
+The apps are ad-hoc signed rather than notarized by Apple; install them only
+after deciding to trust these builds. Homebrew verifies each release archive
+against the checksum recorded in the tap. If Gatekeeper blocks the first
+launch, approve Emacs explicitly in System Settings > Privacy & Security.
+Only one channel can be installed at a time because all four provide
+`Emacs.app`, `Emacs Client.app`, and the same command-line tools.
 
 The build workflow retains the 21 most recent releases for each channel. This
 keeps the version currently referenced by the tap downloadable while a newer
