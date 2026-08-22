@@ -1,0 +1,47 @@
+Drive Darwin native compilation with runtime-discovered options.
+
+The statically linked libgccjit bakes the build machine's SDK path into
+the compiled driver, and linking an .eln needs the GCC runtime archives
+(libemutls_w.a and friends) that upstream expects next to an installed
+GCC.  Inject the required driver options at compile time instead:
+
+  -isysroot <xcrun --sdk macosx --show-sdk-path>
+      so a downloaded Emacs.app native-compiles against whatever SDK is
+      active on the running machine, surviving Xcode moves and upgrades;
+
+  -L<Emacs.app>/Contents/Frameworks/libgccjit -static-libgcc
+      so the driver links .eln files against the runtime archives
+      bundled inside the app, keeping it relocatable.
+
+The options are appended to the compilation context rather than to the
+`native-comp-driver-options' defcustom: a user setq of that variable
+must not be able to strip flags the build depends on.
+
+--- a/lisp/emacs-lisp/comp.el
++++ b/lisp/emacs-lisp/comp.el
+@@ -3317,6 +3317,25 @@
+   "Compile as native code the current context naming it NAME.
+ Prepare every function for final compilation and drive the C back-end."
+   (let ((dir (file-name-directory name)))
++    ;; With the statically linked libgccjit, the driver needs options
++    ;; naming the active SDK and the GCC runtime archives bundled inside
++    ;; Emacs.app.  GCC bakes the build machine's SDK path into libgccjit;
++    ;; query xcrun for the SDK on the running machine instead, so a
++    ;; downloaded app keeps native-compiling after Xcode moves or is
++    ;; upgraded.  The bundled runtime directory provides libemutls_w.a
++    ;; and friends for linking .eln files; locate it relative to the
++    ;; Emacs binary so the app stays relocatable.
++    (when (eq system-type 'darwin)
++      (let ((default-directory invocation-directory))
++        (setf (comp-ctxt-driver-options comp-ctxt)
++              (append
++               (list "-isysroot"
++                     (car (process-lines "/usr/bin/xcrun" "--sdk" "macosx"
++                                         "--show-sdk-path"))
++                     (concat "-L" (expand-file-name "../Frameworks/libgccjit"
++                                                    invocation-directory))
++                     "-static-libgcc")
++               (comp-ctxt-driver-options comp-ctxt)))))
+     (comp--finalize-relocs)
+     (maphash (lambda (_ f)
+                (comp--log-func f 1))

@@ -60,6 +60,12 @@ fi
 build_autotools zlib https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.xz zlib-1.3.2 --static
 build_autotools libxml2 https://download.gnome.org/sources/libxml2/2.15/libxml2-2.15.3.tar.xz libxml2-2.15.3 --disable-shared
 build_autotools gmp https://ftpmirror.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz gmp-6.3.0 --disable-shared
+build_autotools mpfr https://ftpmirror.gnu.org/gnu/mpfr/mpfr-4.2.2.tar.xz mpfr-4.2.2 \
+  --disable-shared --with-gmp="${DEPS_PREFIX}"
+build_autotools mpc https://ftpmirror.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz mpc-1.3.1 \
+  --disable-shared --with-gmp="${DEPS_PREFIX}" --with-mpfr="${DEPS_PREFIX}"
+build_autotools isl https://libisl.sourceforge.io/isl-0.27.tar.xz isl-0.27 \
+  --disable-shared --with-gmp-prefix="${DEPS_PREFIX}"
 build_autotools nettle https://ftpmirror.gnu.org/gnu/nettle/nettle-4.0.tar.gz nettle-4.0 --disable-shared
 build_autotools libidn2 https://ftpmirror.gnu.org/gnu/libidn/libidn2-2.3.8.tar.gz libidn2-2.3.8 --disable-shared
 build_autotools gnutls https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.13.tar.xz gnutls-3.8.13 \
@@ -72,5 +78,9 @@ if ! built tree-sitter; then
 fi
 build_autotools sqlite https://www.sqlite.org/2026/sqlite-autoconf-3530100.tar.gz sqlite-autoconf-3530100 --disable-shared
 build_autotools gzip https://ftpmirror.gnu.org/gnu/gzip/gzip-1.14.tar.xz gzip-1.14
+if ! built gcc; then
+  bash "$(cd "$(dirname "$0")" && pwd)/build-static-libgccjit.sh"
+  mark_built gcc
+fi
 
 touch "${DEPS_PREFIX}/.built"

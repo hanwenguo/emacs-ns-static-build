@@ -40,6 +40,7 @@ jobs:
                 tarball: "Emacs-master.tar.xz",
                 artifact_prefix: "Emacs-master",
                 extra_configure: "",
+                native_comp: false,
               },
               {
                 name: "emacs-31",
@@ -48,6 +49,16 @@ jobs:
                 tarball: "Emacs.tar.xz",
                 artifact_prefix: "Emacs",
                 extra_configure: "",
+                native_comp: false,
+              },
+              {
+                name: "emacs-native-comp",
+                branch: "emacs-31",
+                build_dir: "emacs-native-comp",
+                tarball: "Emacs-native-comp.tar.xz",
+                artifact_prefix: "Emacs-native-comp",
+                extra_configure: "",
+                native_comp: true,
               },
               {
                 name: "igc",
@@ -56,6 +67,7 @@ jobs:
                 tarball: "Emacs-igc.tar.xz",
                 artifact_prefix: "Emacs-igc",
                 extra_configure: "--with-mps",
+                native_comp: true,
               },
             ];
             const { owner, repo } = context.repo;
@@ -114,7 +126,7 @@ jobs:
     if: needs.plan.outputs.any == 'true'
     runs-on: macos-26
     env:
-      DEPS_CACHE_VERSION: v5-resumable
+      DEPS_CACHE_VERSION: v7-gcc-16.2
       DEPS_PREFIX: ${{ github.workspace }}/deps
       CFLAGS: -flto -g0 -O2
     outputs:
@@ -213,8 +225,11 @@ jobs:
           BUILD_DIR: ${{ matrix.build_dir }}
           TARBALL: ${{ matrix.tarball }}
           EXTRA_CONFIGURE: ${{ matrix.extra_configure }}
+          NATIVE_COMP: ${{ matrix.native_comp }}
         run: bash scripts/build-emacs.sh
       - name: Verify packaged app
+        env:
+          NATIVE_COMP: ${{ matrix.native_comp }}
         run: bash scripts/verify-app.sh '${{ matrix.build_dir }}/Emacs.app'
       - name: Upload test artifact
         if: needs.plan.outputs.publish != 'true'
@@ -240,7 +255,10 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
-            const prefix = `${{ matrix.name }}-`;
+            // Match tags exactly (name plus 7-hex hash) so that a channel
+            // whose name prefixes another's can never have its retention
+            // delete the other channel's releases.
+            const tagPattern = new RegExp("^${{ matrix.name }}-[0-9a-f]{7}$");
             const retentionCount = Number.parseInt(process.env.RELEASE_RETENTION, 10);
             const { owner, repo } = context.repo;
 
@@ -255,7 +273,7 @@ jobs:
             });
 
             const toDelete = releases
-              .filter((release) => release.tag_name.startsWith(prefix))
+              .filter((release) => tagPattern.test(release.tag_name))
               .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
               .slice(retentionCount);
 
