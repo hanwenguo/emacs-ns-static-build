@@ -17,6 +17,7 @@ Compared to upstream, these builds have the following differences:
 - Patches applied:
   - [`system-appearance`](https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/system-appearance.patch)
   - [`round-undecorated-frame`](https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/round-undecorated-frame.patch)
+  - [`xwidget-pdfkit`](https://github.com/hanwenguo/pdfkit.el) to view PDFs with PDFKit
   - and some patches in this repo to make native compilation work
 
 Install via Homebrew:
