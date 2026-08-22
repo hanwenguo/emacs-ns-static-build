@@ -29,8 +29,10 @@ git clone --depth 1 -b "${EMACS_BRANCH}" https://github.com/emacs-mirror/emacs.g
 cd "${BUILD_DIR}" && sed -i '' '/darwin/ s/lncurses/lncursesw/g' configure.ac
 curl -fL -O https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/system-appearance.patch --retry 3
 curl -fL -O https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/round-undecorated-frame.patch --retry 3
+curl -fL -O https://raw.githubusercontent.com/hanwenguo/pdfkit.el/main/patches/xwidget-pdfkit-combined.patch --retry 3
 patch -f -V none -p1 < system-appearance.patch
 patch -f -V none -p1 < round-undecorated-frame.patch
+patch -f -V none -p1 < xwidget-pdfkit-combined.patch
 native_comp_configure=""
 if [[ "${NATIVE_COMP}" == "true" ]]; then
   patch -f -V none -p1 < "${script_dir}/../patches/emacs-native-comp-darwin.patch"
