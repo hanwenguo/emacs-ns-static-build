@@ -1,20 +1,25 @@
 [![MacOS Build for GNU Emacs](https://github.com/hanwenguo/emacs-ns-static-build/actions/workflows/build.yml/badge.svg)](https://github.com/hanwenguo/emacs-ns-static-build/actions/workflows/build.yml)
 
-This repository automatically builds GNU Emacs with and without the Memory Pool
-System for Darwin when upstream updates, directly from upstream git sources.
-This build is intended for Emacs developers who want to test the bleeding-edge
-version. Please report any bugs directly to the Emacs mailing list, as the
-source is not modified here.
+This repository automatically builds GNU Emacs for macOS for my _personal
+usage_. Works only on ARM macOS 26. The following variants are built:
 
-Release tarballs contain both `Emacs.app` and `Emacs Client.app`. `Emacs
-Client.app` is an AppleScript app for Finder open-with, drag-and-drop,
-Spotlight/Dock launch, and `org-protocol://` URLs. It assumes `Emacs.app` is
-installed at `/Applications/Emacs.app`. This feature is taken from
-[emacs-plus](https://github.com/d12frosted/homebrew-emacs-plus).
+- `master` branch, without native compilation
+- `feature/igc3` branch, with native compilation
+- `emacs-31` branch, with and without native compilation
 
-## Homebrew
+Compared to upstream, these builds have the following differences:
 
-The four build channels are available from the personal tap:
+- All external libraries are statically linked (except macOS system libraries),
+  thanks to [RadioNoise/ebuild](https://github.com/RadioNoiseE/ebuild)
+- Link time optimization enabled
+- An `Emacs Client.app` provided, thanks to
+  [emacs-plus](https://github.com/d12frosted/homebrew-emacs-plus)
+- Patches applied:
+  - [`system-appearance`](https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/system-appearance.patch)
+  - [`round-undecorated-frame`](https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/round-undecorated-frame.patch)
+  - and some patches in this repo to make native compilation work
+
+Install via Homebrew:
 
 ```sh
 brew install --cask hanwenguo/tap/emacs-ns-static
@@ -22,29 +27,3 @@ brew install --cask hanwenguo/tap/emacs-ns-static@master
 brew install --cask hanwenguo/tap/emacs-ns-static-native-comp
 brew install --cask hanwenguo/tap/emacs-ns-static-native-comp@igc
 ```
-
-The apps are ad-hoc signed rather than notarized by Apple; install them only
-after deciding to trust these builds. Homebrew verifies each release archive
-against the checksum recorded in the tap. If Gatekeeper blocks the first
-launch, approve Emacs explicitly in System Settings > Privacy & Security.
-Only one channel can be installed at a time because all four provide
-`Emacs.app`, `Emacs Client.app`, and the same command-line tools.
-
-The build workflow retains the 21 most recent releases for each channel. This
-keeps the version currently referenced by the tap downloadable while a newer
-build is being tested and published, including during multi-day updater delays.
-
-No package manager is used during the build process, as all external
-dependencies are fetched from upstream and compiled from source. A statically
-linked Emacs is produced (except the system components), making link time
-optimization possible.
-
-> [!Note]
-> Emacs is built with the GNU MP Bignum Library, GnuTLS, Tree Sitter,
-> XML2 and Zlib.  The emacs-native-comp and igc channels additionally
-> enable native compilation through a statically linked libgccjit built
-> from GCC sources; no third-party dynamic library is included or
-> linked.  Native compilation discovers the active macOS SDK through
-> `xcrun`, so those channels need Xcode or the Command Line Tools
-> installed at runtime.  The master and emacs-31 channels are built
-> without native compilation.
