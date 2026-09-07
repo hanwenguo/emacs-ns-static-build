@@ -10,6 +10,10 @@ set -euo pipefail
 
 : "${DEPS_PREFIX:?DEPS_PREFIX must be set}"
 
+script_dir=$(cd "$(dirname "$0")" && pwd)
+# shellcheck source=scripts/gnu-mirrors.sh
+source "${script_dir}/gnu-mirrors.sh"
+
 export PATH="${DEPS_PREFIX}/bin:${PATH}"
 export PKG_CONFIG_PATH="${DEPS_PREFIX}/lib/pkgconfig:${DEPS_PREFIX}/share/pkgconfig"
 export CPPFLAGS="-I${DEPS_PREFIX}/include"
@@ -22,8 +26,19 @@ built() { [[ -f "${marker_dir}/$1" ]]; }
 mark_built() { touch "${marker_dir}/$1"; }
 
 fetch() {
-  curl -fLO "$1" --retry 3
-  tar -xf "$(basename "$1")"
+  local url=$1 file candidate
+  file=$(basename "${url}")
+  while read -r candidate; do
+    if curl -fL --retry 3 --connect-timeout 30 \
+        --speed-limit 1024 --speed-time 60 -o "${file}" "${candidate}"; then
+      # Bare return: propagate tar's status rather than masking it.
+      tar -xf "${file}"
+      return
+    fi
+    echo "fetch: ${candidate} failed, trying the next mirror" >&2
+  done < <(gnu_mirror_urls "${url}")
+  echo "fetch: no mirror served ${url}" >&2
+  return 1
 }
 
 # build_autotools NAME URL SRCDIR [CONFIGURE_FLAGS...]
@@ -79,7 +94,7 @@ fi
 build_autotools sqlite https://www.sqlite.org/2026/sqlite-autoconf-3530100.tar.gz sqlite-autoconf-3530100 --disable-shared
 build_autotools gzip https://ftpmirror.gnu.org/gnu/gzip/gzip-1.14.tar.xz gzip-1.14
 if ! built gcc; then
-  bash "$(cd "$(dirname "$0")" && pwd)/build-static-libgccjit.sh"
+  bash "${script_dir}/build-static-libgccjit.sh"
   mark_built gcc
 fi
 
