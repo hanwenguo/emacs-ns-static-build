@@ -27,14 +27,27 @@ GCC_DARWIN_PATCH_SHA256=578a78ae0bc62a02f260b6a20c7f23e71deee16ed644e9cb5619247b
 JOBS=${JOBS:-4}
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
+# shellcheck source=scripts/gnu-mirrors.sh
+source "${repo_root}/scripts/gnu-mirrors.sh"
 
 download_and_verify() {
   local url=$1
   local output=$2
   local sha256=$3
+  local candidate
 
-  curl --fail --location --retry 3 --output "${output}" "${url}"
-  echo "${sha256}  ${output}" | shasum --algorithm 256 --check
+  while read -r candidate; do
+    if curl --fail --location --retry 3 --connect-timeout 30 \
+        --speed-limit 1024 --speed-time 60 --output "${output}" "${candidate}"; then
+      # Bare return: a checksum mismatch must fail, not fall through.
+      echo "${sha256}  ${output}" | shasum --algorithm 256 --check
+      return
+    fi
+    echo "download: ${candidate} failed, trying the next mirror" >&2
+  done < <(gnu_mirror_urls "${url}")
+
+  echo "download: no mirror served ${url}" >&2
+  return 1
 }
 
 gcc_work_root="${DEPS_PREFIX}/.gcc-work"
