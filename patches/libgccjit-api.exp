@@ -1,4 +1,0 @@
-# Symbols kept external in the folded libgccjit.a; everything else
-# (GCC internals, libiberty, libstdc++, libgcc, GMP, MPFR, MPC, ISL,
-# zlib, libiconv) is hidden so it cannot collide with Emacs.
-_gcc_jit_*

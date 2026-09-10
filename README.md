@@ -1,11 +1,12 @@
 [![MacOS Build for GNU Emacs](https://github.com/hanwenguo/emacs-ns-static-build/actions/workflows/build.yml/badge.svg)](https://github.com/hanwenguo/emacs-ns-static-build/actions/workflows/build.yml)
 
 This repository automatically builds GNU Emacs for macOS for my _personal
-usage_. Works only on ARM macOS 26. The following variants are built:
+usage_. Works only on ARM macOS 26. The following branches are built, none of
+them with native compilation:
 
-- `master` branch, without native compilation
-- `feature/igc3` branch, with native compilation
-- `emacs-31` branch, with and without native compilation
+- `master`
+- `emacs-31`
+- `feature/igc3`
 
 Compared to upstream, these builds have the following differences:
 
@@ -18,13 +19,11 @@ Compared to upstream, these builds have the following differences:
   - [`system-appearance`](https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/system-appearance.patch)
   - [`round-undecorated-frame`](https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/round-undecorated-frame.patch)
   - [`xwidget-pdfkit`](https://github.com/hanwenguo/pdfkit.el) to view PDFs with PDFKit
-  - and some patches in this repo to make native compilation work
 
 Install via Homebrew:
 
 ```sh
 brew install --cask hanwenguo/tap/emacs-ns-static
 brew install --cask hanwenguo/tap/emacs-ns-static@master
-brew install --cask hanwenguo/tap/emacs-ns-static-native-comp
-brew install --cask hanwenguo/tap/emacs-ns-static-native-comp@igc
+brew install --cask hanwenguo/tap/emacs-ns-static@igc
 ```

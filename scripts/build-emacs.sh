@@ -10,7 +10,6 @@ set -euo pipefail
 : "${BUILD_DIR:?BUILD_DIR must be set}"
 : "${TARBALL:?TARBALL must be set}"
 EXTRA_CONFIGURE=${EXTRA_CONFIGURE:-}
-NATIVE_COMP=${NATIVE_COMP:-false}
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
 
@@ -18,8 +17,7 @@ export PATH="${DEPS_PREFIX}/bin:${PATH}"
 export PKG_CONFIG_PATH="${DEPS_PREFIX}/lib/pkgconfig:${DEPS_PREFIX}/share/pkgconfig"
 export CPPFLAGS="-I${DEPS_PREFIX}/include"
 export LDFLAGS="-L${DEPS_PREFIX}/lib"
-# The dependency prefix carries GCC for libgccjit; Emacs itself must still
-# be compiled by the system toolchain.
+# Emacs is compiled by the system toolchain.
 export CC=/usr/bin/clang
 export CXX=/usr/bin/clang++
 export OBJC=/usr/bin/clang
@@ -33,11 +31,6 @@ curl -fL -O https://raw.githubusercontent.com/hanwenguo/pdfkit.el/main/patches/x
 patch -f -V none -p1 < system-appearance.patch
 patch -f -V none -p1 < round-undecorated-frame.patch
 patch -f -V none -p1 < xwidget-pdfkit-combined.patch
-native_comp_configure=""
-if [[ "${NATIVE_COMP}" == "true" ]]; then
-  patch -f -V none -p1 < "${script_dir}/../patches/emacs-native-comp-darwin.patch"
-  native_comp_configure="--with-native-compilation=aot"
-fi
 ./autogen.sh
 if ! ./configure PKG_CONFIG="${DEPS_PREFIX}/bin/pkgconf --static" \
                             --disable-build-details          \
@@ -48,7 +41,6 @@ if ! ./configure PKG_CONFIG="${DEPS_PREFIX}/bin/pkgconf --static" \
                             --with-libgmp                    \
                             --with-gnutls                    \
                             --with-modules                   \
-                            ${native_comp_configure}         \
                             --with-native-image-api          \
                             --with-ns                        \
                             --with-small-ja-dic              \
@@ -66,19 +58,6 @@ if ! ./configure PKG_CONFIG="${DEPS_PREFIX}/bin/pkgconf --static" \
 fi
 make -j4 && make install
 ditto nextstep/Emacs.app Emacs.app
-if [[ "${NATIVE_COMP}" == "true" ]]; then
-  # Bundle the GCC runtime archives the embedded driver needs to link .eln
-  # files on user machines (see patches/emacs-native-comp-darwin.patch).
-  native_runtime_dir=Emacs.app/Contents/Frameworks/libgccjit
-  emutls_archive=$(find "${DEPS_PREFIX}" -name 'libemutls_w.a' -type f -print -quit)
-  test -f "${emutls_archive}"
-  gcc_runtime_source_dir=$(dirname "${emutls_archive}")
-  mkdir -p "${native_runtime_dir}"
-  for runtime_archive in libgcc.a libemutls_w.a libheapt_w.a; do
-    test -f "${gcc_runtime_source_dir}/${runtime_archive}"
-    cp "${gcc_runtime_source_dir}/${runtime_archive}" "${native_runtime_dir}/"
-  done
-fi
 # Add command-line helpers used by the packaged apps.
 cat > Emacs.app/Contents/MacOS/bin/emacs << 'EOF'
 #!/bin/bash
