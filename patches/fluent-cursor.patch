@@ -1,0 +1,644 @@
+diff --git a/lisp/term/ns-win.el b/lisp/term/ns-win.el
+index f78e75b7..26254a03 100644
+--- a/lisp/term/ns-win.el
++++ b/lisp/term/ns-win.el
+@@ -56,6 +56,46 @@ ns
+   "GNUstep/macOS specific features."
+   :group 'environment)
+ 
++(defun ns--set-cursor-animation-option (symbol value)
++  "Set cursor animation option SYMBOL to VALUE and refresh the display."
++  (set-default symbol value)
++  (when (eq window-system 'ns)
++    (redraw-display)))
++
++(defcustom ns-cursor-animation nil
++  "Animate the active text cursor with a spring on macOS 10.14 or later.
++Point and editing take effect immediately.  All cursor shapes are supported.
++Filled boxes use native cursor colors and reveal stationary text through
++a moving mask.
++Use `setq-local' to override this setting in a particular buffer, for
++example from `term-mode-hook' or `compilation-mode-hook'.  Buffers without
++an override use the global default set through Customize or `setq-default'.
++The macOS Reduce Motion setting disables animation."
++  :type 'boolean
++  :group 'ns
++  :initialize #'custom-initialize-default
++  :set #'ns--set-cursor-animation-option)
++
++(defcustom ns-cursor-animation-response 0.125
++  "Spring response in seconds for cursor navigation.
++Smaller values settle faster.  This is the spring period, rather than the
++total settling time.  Positive values are limited to 0.01 through 2 seconds.
++A non-positive or non-numeric value makes navigation instantaneous.
++This setting can be overridden with `setq-local' for a particular buffer."
++  :type 'number
++  :group 'ns
++  :initialize #'custom-initialize-default
++  :set #'ns--set-cursor-animation-option)
++
++(defcustom ns-cursor-animation-typing-response 0.125
++  "Spring response in seconds for cursor movement after text edits.
++See `ns-cursor-animation-response' for the meaning and range of values.
++This setting can be overridden with `setq-local' for a particular buffer."
++  :type 'number
++  :group 'ns
++  :initialize #'custom-initialize-default
++  :set #'ns--set-cursor-animation-option)
++
+ ;;;; Command line argument handling.
+ 
+ (defvar x-invocation-args)
+diff --git a/src/dispextern.h b/src/dispextern.h
+index 1c431800..3d8dc45d 100644
+--- a/src/dispextern.h
++++ b/src/dispextern.h
+@@ -3647,6 +3647,9 @@ #define DEFAULT_TOOL_BAR_IMAGE_HEIGHT 24
+ extern void draw_phys_cursor_glyph (struct window *,
+                                     struct glyph_row *,
+                                     enum draw_glyphs_face);
++#ifdef HAVE_NS
++extern void gui_draw_window_cursor_layer (struct window *, int, int);
++#endif
+ extern void get_phys_cursor_geometry (struct window *, struct glyph_row *,
+                                       struct glyph *, int *, int *, int *);
+ extern void erase_phys_cursor (struct window *);
+diff --git a/src/nsterm.h b/src/nsterm.h
+index 69f565d5..4d2750da 100644
+--- a/src/nsterm.h
++++ b/src/nsterm.h
+@@ -471,6 +471,22 @@ #define NSTRACE_UNSILENCE()
+ #ifdef NS_IMPL_COCOA
+   char *old_title;
+   BOOL maximizing_resize;
++#if MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
++  CALayer *cursorClipLayer;
++  CALayer *animatedCursor;
++  CALayer *cursorTextLayer;
++  CALayer *cursorTextMask;
++  NSRect cursorTextRect;
++  CFTimeInterval cursorAnimationEnd;
++  EMACS_INT cursorWindow;
++  /* Identity only; never dereferenced across redisplays.  */
++  struct buffer *cursorBuffer;
++  uintmax_t cursorModiff;
++  ptrdiff_t cursorStart, cursorHscroll;
++  int cursorVscroll;
++  NSRect cursorClip;
++  NSSize cursorViewSize;
++#endif
+ #endif
+   BOOL font_panel_active;
+   NSFont *font_panel_result;
+@@ -518,6 +534,12 @@ #define NSTRACE_UNSILENCE()
+ #if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
+ - (void)lockFocus;
+ - (void)unlockFocus;
++- (void)hideAnimatedCursor:(BOOL)reset;
++- (void)checkAnimatedCursor;
++- (void)resetAnimatedCursorForWindow:(struct window *)w;
++- (void)showAnimatedCursor:(enum text_cursor_kinds)type
++                   inRect:(NSRect)rect
++                forWindow:(struct window *)w;
+ #endif
+ - (void)copyRect:(NSRect)srcRect to:(NSPoint)dest;
+ 
+diff --git a/src/nsterm.m b/src/nsterm.m
+index 77ce7d94..c298cb27 100644
+--- a/src/nsterm.m
++++ b/src/nsterm.m
+@@ -62,6 +62,10 @@ Updated by Christian Limpach (chris@nice.ch)
+ #include "font.h"
+ #include "pdumper.h"
+ 
++#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
++#import <QuartzCore/QuartzCore.h>
++#endif
++
+ #ifdef NS_IMPL_GNUSTEP
+ #include "process.h"
+ #import <GNUstepGUI/GSDisplayServer.h>
+@@ -309,6 +313,10 @@ - (unsigned long)unsignedLong
+ static struct frame *ns_updating_frame;
+ static int ns_window_num = 0;
+ static BOOL gsaved = NO;
++#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
++/* Redirect glyph drawing while preparing the stationary box-cursor text.  */
++static CGContextRef ns_cursor_context;
++#endif
+ #ifdef NS_IMPL_COCOA
+ static BOOL ns_menu_bar_is_hidden = NO;
+ #endif
+@@ -1225,6 +1233,9 @@ Convert a CGRect from Cocoa screen coordinates (origin at bottom-left
+   block_input ();
+ 
+   [view unlockFocus];
++#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
++  [view checkAnimatedCursor];
++#endif
+ #if defined (NS_IMPL_GNUSTEP) || MAC_OS_X_VERSION_MIN_REQUIRED < 101400
+   [[view window] flushWindow];
+ #endif
+@@ -1254,7 +1265,11 @@ Convert a CGRect from Cocoa screen coordinates (origin at bottom-left
+       NSTRACE_RECT ("r", *r);
+     }
+ 
+-  if (f != ns_updating_frame)
++  if (f != ns_updating_frame
++#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
++      && !ns_cursor_context
++#endif
++      )
+     {
+       EmacsView *view = FRAME_NS_VIEW (f);
+       [view lockFocus];
+@@ -1292,7 +1307,11 @@ Convert a CGRect from Cocoa screen coordinates (origin at bottom-left
+       gsaved = NO;
+     }
+ 
+-  if (f != ns_updating_frame)
++  if (f != ns_updating_frame
++#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
++      && !ns_cursor_context
++#endif
++      )
+     {
+       EmacsView *view = FRAME_NS_VIEW (f);
+       [view unlockFocus];
+@@ -2796,6 +2815,9 @@ Hide the window (X11 semantics)
+   NSRect r;
+ 
+   NSTRACE_WHEN (NSTRACE_GROUP_UPDATES, "ns_clear_frame");
++#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
++  [(EmacsView *)view hideAnimatedCursor:YES];
++#endif
+ 
+  /* comes on initial frame because we have
+     after-make-frame-functions = select-frame */
+@@ -2899,6 +2921,9 @@ Hide the window (X11 semantics)
+     NSPoint dest = NSMakePoint (x, to_y);
+     EmacsView *view = FRAME_NS_VIEW (f);
+ 
++#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
++    [view resetAnimatedCursorForWindow:w];
++#endif
+     [view copyRect:srcRect to:dest];
+ #if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED < 101400
+     [view setNeedsDisplayInRect:srcRect];
+@@ -3284,6 +3309,28 @@ Hide the window (X11 semantics)
+ }
+ 
+ 
++#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
++/* The echo area can own the active cursor without being selected.  Keep
++   this in step with get_window_cursor_type in xdisp.c.  */
++static struct window *
++ns_active_cursor_window (struct frame *f)
++{
++  if (cursor_in_echo_area && FRAME_HAS_MINIBUF_P (f)
++      && EQ (FRAME_MINIBUF_WINDOW (f), echo_area_window))
++    return XWINDOW (echo_area_window);
++  return XWINDOW (f->selected_window);
++}
++
++static bool
++ns_cursor_animation_enabled (struct window *w)
++{
++  /* Redisplay can run with a different current buffer, notably while
++     updating the echo area or handling process output.  */
++  return !NILP (Fbuffer_local_value (Qns_cursor_animation, w->contents));
++}
++#endif
++
++
+ static void
+ ns_draw_window_cursor (struct window *w, struct glyph_row *glyph_row,
+ 		       int x, int y, enum text_cursor_kinds cursor_type,
+@@ -3299,6 +3346,20 @@ Note that CURSOR_WIDTH is meaningful only for (h)bar cursors.
+   struct glyph *phys_cursor_glyph;
+   struct glyph *cursor_glyph;
+ 
++#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
++  EmacsView *view = FRAME_NS_VIEW (f);
++  BOOL animate = (ns_cursor_animation_enabled (w) && active_p
++                  && [[view window] isKeyWindow]
++                  && ![[view window] inLiveResize]
++                  && ![[NSWorkspace sharedWorkspace]
++                         accessibilityDisplayShouldReduceMotion]);
++  if (w == ns_active_cursor_window (f)
++      && (!animate || cursor_type == NO_CURSOR || !on_p))
++    [view hideAnimatedCursor:(!animate
++                             || (on_p && cursor_type == NO_CURSOR
++                                 && !w->cursor_off_p))];
++#endif
++
+   /* If cursor is out of bounds, don't draw garbage.  This can happen
+      in mini-buffer windows when switching between echo area glyphs
+      and mini-buffer.  */
+@@ -3320,6 +3381,10 @@ Note that CURSOR_WIDTH is meaningful only for (h)bar cursors.
+ 
+   if ((phys_cursor_glyph = get_phys_cursor_glyph (w)) == NULL)
+     {
++#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
++      if (active_p)
++        [view hideAnimatedCursor:YES];
++#endif
+       NSTRACE_MSG ("No phys cursor glyph was found!");
+ 
+       if (glyph_row->exact_window_width_line_p
+@@ -3361,6 +3426,16 @@ Note that CURSOR_WIDTH is meaningful only for (h)bar cursors.
+       h = cursor_height;
+     }
+ 
++#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
++  /* A narrow filled cursor belongs at the right edge of an RTL tab or
++     stretch glyph, just as in ns_draw_stretch_glyph_string.  */
++  if (animate && cursor_type == FILLED_BOX_CURSOR
++      && phys_cursor_glyph->type == STRETCH_GLYPH
++      && !x_stretch_cursor_p && glyph_row->reversed_p)
++    fx = (WINDOW_TEXT_TO_FRAME_PIXEL_X (w, w->phys_cursor.x)
++          + phys_cursor_glyph->pixel_width - w->phys_cursor_width);
++#endif
++
+   r.origin.x = fx, r.origin.y = fy;
+   r.size.height = h;
+   r.size.width = w->phys_cursor_width;
+@@ -3378,6 +3453,17 @@ Note that CURSOR_WIDTH is meaningful only for (h)bar cursors.
+     ns_UAZoom_cursor_rect_new = r;
+ #endif
+ 
++#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
++  if (animate && cursor_type != DEFAULT_CURSOR)
++    {
++      if (NSIsEmptyRect (r))
++        [view hideAnimatedCursor:YES];
++      else
++        [view showAnimatedCursor:cursor_type inRect:r forWindow:w];
++      return;
++    }
++#endif
++
+   ns_focus (f, NULL, 0);
+ 
+   NSGraphicsContext *ctx = [NSGraphicsContext currentContext];
+@@ -4392,7 +4478,11 @@ Function modeled after x_draw_glyph_string_box ().
+   struct face *face;
+   NSColor *fg_color;
+ 
+-  if (s->hl == DRAW_CURSOR && !x_stretch_cursor_p)
++  if (s->hl == DRAW_CURSOR && !x_stretch_cursor_p
++#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
++      && !ns_cursor_context
++#endif
++      )
+     {
+       /* If `x-stretch-cursor' is nil, don't draw a block cursor as
+ 	 wide as the stretch glyph.  */
+@@ -7059,6 +7149,11 @@ - (void)dealloc
+     [nonfs_window release];
+ 
+ #if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
++  [animatedCursor release];
++  [cursorTextLayer release];
++  [cursorTextMask release];
++  [cursorClipLayer removeFromSuperlayer];
++  [cursorClipLayer release];
+   /* Release layer and menu */
+   EmacsLayer *layer = (EmacsLayer *)[self layer];
+   [layer release];
+@@ -8490,6 +8585,9 @@ - (void)windowDidResignKey: (NSNotification *)notification
+   struct ns_display_info *dpyinfo = FRAME_DISPLAY_INFO (emacsframe);
+   BOOL is_focus_frame = dpyinfo->ns_focus_frame == emacsframe;
+   NSTRACE ("[EmacsView windowDidResignKey:]");
++#if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
++  [self hideAnimatedCursor:YES];
++#endif
+ 
+   if (is_focus_frame)
+     dpyinfo->ns_focus_frame = 0;
+@@ -9280,6 +9378,231 @@ - (instancetype)toggleToolbar: (id)sender
+ 
+ 
+ #if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
++/* Animation runs in the window server.  Each movement adds a spring
++   offset from the previous model position to zero.  Existing offsets
++   continue to settle, preserving position and velocity on rapid input.  */
++- (void)hideAnimatedCursor:(BOOL)reset
++{
++  [CATransaction begin];
++  [CATransaction setDisableActions:YES];
++  [cursorClipLayer setHidden:YES];
++  if (reset)
++    {
++      [animatedCursor removeAllAnimations];
++      [cursorTextMask removeAllAnimations];
++      [cursorTextLayer setContents:nil];
++      cursorAnimationEnd = 0;
++      cursorWindow = 0;
++      cursorBuffer = NULL;
++    }
++  [CATransaction commit];
++}
++
++- (void)resetAnimatedCursorForWindow:(struct window *)w
++{
++  if (cursorWindow == w->sequence_number)
++    [self hideAnimatedCursor:YES];
++}
++
++- (void)checkAnimatedCursor
++{
++  if (!cursorWindow)
++    return;
++  struct window *w = ns_active_cursor_window (emacsframe);
++  if (!ns_cursor_animation_enabled (w) || cursorWindow != w->sequence_number
++      || cursorBuffer != XBUFFER (w->contents))
++    [self hideAnimatedCursor:YES];
++  else if (!w->phys_cursor_on_p || w->phys_cursor_type == NO_CURSOR)
++    /* A partial update (for example, an echo-area message after paren
++       highlighting) can finish while the text cursor is erased.  Hide
++       it, but keep the position and springs for the subsequent redraw.  */
++    [self hideAnimatedCursor:NO];
++}
++
++/* Draw text at its screen coordinates, in the native box-cursor colors.
++   Core Animation subsequently reveals this fixed image through a moving
++   mask.  The frame's backing pixels and physical cursor remain untouched.  */
++static CGImageRef
++ns_cursor_text_image (EmacsView *view, struct window *w, NSRect rect)
++{
++  CGFloat scale = [[view window] backingScaleFactor];
++  size_t width = ceil (NSWidth (rect) * scale);
++  size_t height = ceil (NSHeight (rect) * scale);
++  if (!width || !height)
++    return NULL;
++  CGColorSpaceRef colors = [[[view window] colorSpace] CGColorSpace];
++  CGContextRef context = CGBitmapContextCreate
++    (NULL, width, height, 8, 0, colors,
++     kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Host);
++  if (!context)
++    return NULL;
++  CGContextTranslateCTM (context, 0, height);
++  CGContextScaleCTM (context, scale, -scale);
++  CGContextTranslateCTM (context, -NSMinX (rect), -NSMinY (rect));
++
++  block_input ();
++  [NSGraphicsContext saveGraphicsState];
++  BOOL saved = gsaved;
++  gsaved = NO;
++  ns_cursor_context = context;
++  [NSGraphicsContext setCurrentContext:
++    [NSGraphicsContext graphicsContextWithCGContext:context flipped:YES]];
++  [FRAME_CURSOR_COLOR (XFRAME (w->frame)) set];
++  NSRectFill (rect);
++  gui_draw_window_cursor_layer (w, floor (NSMinY (rect)), ceil (NSMaxY (rect)));
++  ns_cursor_context = NULL;
++  gsaved = saved;
++  [NSGraphicsContext restoreGraphicsState];
++  unblock_input ();
++
++  CGImageRef image = CGBitmapContextCreateImage (context);
++  CGContextRelease (context);
++  return image;
++}
++
++- (void)showAnimatedCursor:(enum text_cursor_kinds)type
++                   inRect:(NSRect)rect
++                forWindow:(struct window *)w
++{
++  int x, y, width, height;
++  window_box (w, TEXT_AREA, &x, &y, &width, &height);
++  NSRect clip = NSIntersectionRect (NSMakeRect (x, y, width, height),
++                                     [self bounds]);
++  struct buffer *buffer = XBUFFER (w->contents);
++  ptrdiff_t start = marker_position (w->start);
++  BOOL same = (cursorWindow == w->sequence_number && cursorBuffer == buffer
++               && NSEqualPoints (cursorClip.origin, clip.origin)
++               && NSWidth (cursorClip) == NSWidth (clip)
++               && NSEqualSizes (cursorViewSize, [self bounds].size)
++               && cursorStart == start && cursorHscroll == w->hscroll
++               && cursorVscroll == w->vscroll);
++  /* Growing or shrinking the echo area only changes the bottom clip
++     edge.  Preserve motion if the text origin, width and view size are
++     unchanged; actual scrolling and frame resizing still reset it.  */
++  BOOL editing = same && cursorModiff != BUF_CHARS_MODIFF (buffer);
++  NSPoint old = [animatedCursor position];
++  /* A wrap caused by typing is a new layout, not a trip across the line.  */
++  if (editing && old.y != NSMinY (rect))
++    same = NO;
++
++  /* Horizontal motion only needs a strip of text.  Vertical motion can
++     retain velocity across reversals, so cover the full text area until
++     all of its springs have settled.  Keep coordinates fixed even when
++     the strip changes size or the echo area changes the bottom clip.  */
++  CFTimeInterval now = CACurrentMediaTime ();
++  NSRect textRect = NSMakeRect (NSMinX (clip), NSMinY (rect),
++                                NSWidth (clip), NSHeight (rect));
++  if (same)
++    {
++      if (old.y != NSMinY (rect))
++        textRect = clip;
++      else
++        textRect = NSUnionRect (textRect,
++          NSMakeRect (NSMinX (clip), old.y, NSWidth (clip),
++                       NSHeight ([animatedCursor bounds])));
++      if (now < cursorAnimationEnd)
++        textRect = NSUnionRect (textRect, cursorTextRect);
++    }
++  textRect = NSIntersectionRect (NSIntegralRect (textRect), clip);
++  CGImageRef text = type == FILLED_BOX_CURSOR
++    ? ns_cursor_text_image (self, w, textRect) : NULL;
++
++  [CATransaction begin];
++  [CATransaction setDisableActions:YES];
++  if (!cursorClipLayer)
++    {
++      cursorClipLayer = [[CALayer alloc] init];
++      [cursorClipLayer setAnchorPoint:CGPointZero];
++      [cursorClipLayer setMasksToBounds:YES];
++      [[self layer] addSublayer:cursorClipLayer];
++      animatedCursor = [[CALayer alloc] init];
++      [animatedCursor setAnchorPoint:CGPointZero];
++      [cursorClipLayer addSublayer:animatedCursor];
++      cursorTextLayer = [[CALayer alloc] init];
++      [cursorTextLayer setAnchorPoint:CGPointZero];
++      [cursorClipLayer addSublayer:cursorTextLayer];
++      cursorTextMask = [[CALayer alloc] init];
++      [cursorTextMask setAnchorPoint:CGPointZero];
++      [cursorTextMask setBackgroundColor:[[NSColor blackColor] CGColor]];
++      [cursorTextLayer setMask:cursorTextMask];
++    }
++  /* View coordinates are top-down.  The backing layer's geometry is
++     owned by AppKit, so explicitly convert the clipping layer's origin.  */
++  NSPoint origin = clip.origin;
++  [cursorClipLayer setGeometryFlipped:![[self layer] isGeometryFlipped]];
++  if (![[self layer] isGeometryFlipped])
++    origin.y = NSHeight ([self bounds]) - NSMaxY (clip);
++  [cursorClipLayer setPosition:origin];
++  [cursorClipLayer setBounds:clip];
++  [cursorClipLayer setHidden:NO];
++  [animatedCursor setContentsScale:[[self window] backingScaleFactor]];
++  /* The solid shape and the text mask move together; the glyph image
++     stays fixed in window coordinates, including between retargets.  */
++  NSColor *color = [FRAME_CURSOR_COLOR (emacsframe)
++                     colorUsingColorSpace:[NSColorSpace sRGBColorSpace]];
++  [animatedCursor setBackgroundColor:(type == HOLLOW_BOX_CURSOR
++                                      ? NULL : [color CGColor])];
++  [animatedCursor setBorderColor:[color CGColor]];
++  [animatedCursor setBorderWidth:type == HOLLOW_BOX_CURSOR ? 1.0 : 0.0];
++  [animatedCursor setOpacity:1.0];
++  [animatedCursor setBounds:NSMakeRect (0, 0, NSWidth (rect), NSHeight (rect))];
++  [animatedCursor setPosition:rect.origin];
++  [cursorTextLayer setContentsScale:[[self window] backingScaleFactor]];
++  [cursorTextLayer setPosition:textRect.origin];
++  [cursorTextLayer setBounds:textRect];
++  [cursorTextLayer setContents:(id)text];
++  [cursorTextLayer setHidden:!text];
++  [cursorTextMask setBounds:[animatedCursor bounds]];
++  [cursorTextMask setContentsScale:[[self window] backingScaleFactor]];
++  [cursorTextMask setPosition:rect.origin];
++  if (text)
++    CGImageRelease (text);
++
++  Lisp_Object value = Fbuffer_local_value
++    (editing ? Qns_cursor_animation_typing_response : Qns_cursor_animation_response,
++     w->contents);
++  double response = NUMBERP (value) ? XFLOATINT (value) : 0;
++  if (!same || !isfinite (response) || response <= 0)
++    {
++      [animatedCursor removeAllAnimations];
++      [cursorTextMask removeAllAnimations];
++      cursorAnimationEnd = 0;
++    }
++  else if (!NSEqualPoints (old, rect.origin))
++    {
++      /* Bound the work retained by Core Animation for unusual settings.  */
++      response = MIN (2.0, MAX (0.01, response));
++      CASpringAnimation *spring = [CASpringAnimation animationWithKeyPath:@"position"];
++      double omega = 2 * M_PI / response;
++      [spring setMass:1];
++      [spring setStiffness:omega * omega];
++      [spring setDamping:2 * omega];
++      [spring setInitialVelocity:0];
++      [spring setAdditive:YES];
++      [spring setFromValue:[NSValue valueWithPoint:
++                                      NSMakePoint (old.x - NSMinX (rect),
++                                                   old.y - NSMinY (rect))]];
++      [spring setToValue:[NSValue valueWithPoint:NSZeroPoint]];
++      [spring setDuration:[spring settlingDuration]];
++      /* A nil key adds a new offset without replacing a running spring.  */
++      [animatedCursor addAnimation:spring forKey:nil];
++      [cursorTextMask addAnimation:spring forKey:nil];
++      cursorAnimationEnd = MAX (cursorAnimationEnd, now + [spring duration]);
++    }
++  [CATransaction commit];
++
++  cursorWindow = w->sequence_number;
++  cursorBuffer = buffer;
++  cursorModiff = BUF_CHARS_MODIFF (buffer);
++  cursorStart = start;
++  cursorHscroll = w->hscroll;
++  cursorVscroll = w->vscroll;
++  cursorClip = clip;
++  cursorViewSize = [self bounds].size;
++  cursorTextRect = textRect;
++}
++
++
+ - (CALayer *)makeBackingLayer
+ {
+   EmacsLayer *l = [[EmacsLayer alloc]
+@@ -11534,6 +11857,32 @@ Convert an X font name (XLFD) to an NS font name.
+ {
+   NSTRACE ("syms_of_nsterm");
+ 
++  DEFSYM (Qns_cursor_animation, "ns-cursor-animation");
++  DEFSYM (Qns_cursor_animation_response, "ns-cursor-animation-response");
++  DEFSYM (Qns_cursor_animation_typing_response, "ns-cursor-animation-typing-response");
++
++  DEFVAR_BOOL ("ns-cursor-animation", ns_cursor_animation,
++    doc: /* Non-nil animates the active text cursor on macOS 10.14 and later.
++The animation uses critically damped springs and respects Reduce Motion.
++Filled boxes use native cursor colors and reveal stationary text through
++a moving mask.
++Use `setq-local' to override this setting in a particular buffer.
++Point and text editing take effect immediately; only the cursor is animated.  */);
++  ns_cursor_animation = false;
++
++  DEFVAR_LISP ("ns-cursor-animation-response", Vns_cursor_animation_response,
++    doc: /* Spring response in seconds for cursor navigation.
++Smaller values settle faster.  This is the spring period, not the total
++animation duration.  Positive values are limited to 0.01 through 2 seconds.
++A non-positive or non-numeric value makes navigation instantaneous.  */);
++  Vns_cursor_animation_response = make_float (0.125);
++
++  DEFVAR_LISP ("ns-cursor-animation-typing-response",
++    Vns_cursor_animation_typing_response,
++    doc: /* Spring response in seconds for cursor movement after text edits.
++See `ns-cursor-animation-response' for the meaning and range of values.  */);
++  Vns_cursor_animation_typing_response = make_float (0.125);
++
+   ns_antialias_threshold = 10.0;
+   PDUMPER_REMEMBER_SCALAR (ns_antialias_threshold);
+ 
+diff --git a/src/xdisp.c b/src/xdisp.c
+index 6d3fa2fb..93642f76 100644
+--- a/src/xdisp.c
++++ b/src/xdisp.c
+@@ -657,6 +657,12 @@ fill_column_indicator_column (struct it *it, int char_width)
+ 
+ static bool message_log_need_newline;
+ 
++#ifdef HAVE_NS
++/* A stationary sheet of cursor-colored glyphs has a moving native mask;
++   its strings must not be clipped to an individual cursor cell.  */
++static bool drawing_window_cursor_layer;
++#endif
++
+ /* Three markers that message_dolog uses.
+    It could allocate them itself, but that causes trouble
+    in handling memory-full errors.  */
+@@ -2582,7 +2588,11 @@ get_glyph_string_clip_rects (struct glyph_string *s, NativeRectangle *rects, int
+ 
+   /* If drawing the cursor, don't let glyph draw outside its
+      advertised boundaries. Cleartype does this under some circumstances.  */
+-  if (s->hl == DRAW_CURSOR)
++  if (s->hl == DRAW_CURSOR
++#ifdef HAVE_NS
++      && !drawing_window_cursor_layer
++#endif
++      )
+     {
+       struct glyph *glyph = s->first_glyph;
+       int height, max_y;
+@@ -32240,6 +32250,30 @@ draw_glyphs (struct window *w, int x, struct glyph_row *row,
+   return x_reached;
+ }
+ 
++#ifdef HAVE_NS
++/* Draw visible text in cursor colors into the NS backend's offscreen
++   context.  TOP and BOTTOM are frame coordinates.  Preserve physical
++   cursor bookkeeping: this does not change the window's backing store.  */
++void
++gui_draw_window_cursor_layer (struct window *w, int top, int bottom)
++{
++  bool on_p = w->phys_cursor_on_p;
++  drawing_window_cursor_layer = true;
++  for (int i = 0; i < w->current_matrix->nrows; ++i)
++    {
++      struct glyph_row *row = MATRIX_ROW (w->current_matrix, i);
++      int y = WINDOW_TO_FRAME_PIXEL_Y (w, row->y);
++      if (row->enabled_p && !row->mode_line_p && !row->full_width_p
++          && row->visible_height > 0 && y < bottom
++          && y + row->height > top)
++        draw_glyphs (w, row->x, row, TEXT_AREA, 0,
++                     row->used[TEXT_AREA], DRAW_CURSOR, 0);
++    }
++  drawing_window_cursor_layer = false;
++  w->phys_cursor_on_p = on_p;
++}
++#endif
++
+ /* Find the first glyph in the run of underlined glyphs preceding the
+    beginning of glyph string S, and return its font (which could be
+    NULL).  This is needed because that font determines the underline

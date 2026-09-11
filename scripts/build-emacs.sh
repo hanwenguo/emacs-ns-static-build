@@ -1,7 +1,7 @@
 #!/bin/bash
 # Clone, patch, configure, and build Emacs against the static dependencies in
 # DEPS_PREFIX, then assemble Emacs.app and Emacs Client.app and pack the
-# release tarball at ${BUILD_DIR}/${TARBALL}.
+# artifact tarball at ${BUILD_DIR}/${TARBALL}.
 
 set -euo pipefail
 
@@ -23,7 +23,12 @@ export CXX=/usr/bin/clang++
 export OBJC=/usr/bin/clang
 export OBJCXX=/usr/bin/clang++
 
-git clone --depth 1 -b "${EMACS_BRANCH}" https://github.com/emacs-mirror/emacs.git "${BUILD_DIR}"
+# Build the revision selected by the workflow, even if upstream advances
+# while the dependency job runs.  Local builds may specify only a branch.
+git init "${BUILD_DIR}"
+git -C "${BUILD_DIR}" remote add origin https://github.com/emacs-mirror/emacs.git
+git -C "${BUILD_DIR}" fetch --depth 1 origin "${EMACS_COMMIT:-${EMACS_BRANCH}}"
+git -C "${BUILD_DIR}" checkout --detach FETCH_HEAD
 cd "${BUILD_DIR}" && sed -i '' '/darwin/ s/lncurses/lncursesw/g' configure.ac
 curl -fL -O https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/system-appearance.patch --retry 3
 curl -fL -O https://github.com/d12frosted/homebrew-emacs-plus/raw/refs/heads/master/patches/emacs-31/round-undecorated-frame.patch --retry 3
@@ -31,6 +36,8 @@ curl -fL -O https://raw.githubusercontent.com/hanwenguo/pdfkit.el/main/patches/x
 patch -f -V none -p1 < system-appearance.patch
 patch -f -V none -p1 < round-undecorated-frame.patch
 patch -f -V none -p1 < xwidget-pdfkit-combined.patch
+git apply --check "${script_dir}/../patches/fluent-cursor.patch"
+git apply "${script_dir}/../patches/fluent-cursor.patch"
 ./autogen.sh
 if ! ./configure PKG_CONFIG="${DEPS_PREFIX}/bin/pkgconf --static" \
                             --disable-build-details          \

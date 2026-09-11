@@ -1,20 +1,15 @@
-name: MacOS Build for GNU Emacs
+name: Emacs with fluent cursor
 
 on:
+  push:
+    branches: [fluent-cursor-artifacts]
   workflow_dispatch:
     inputs:
-      test_build:
-        description: Build without publishing; upload tarballs as artifacts
-        required: false
-        default: false
-        type: boolean
       channels:
         description: Comma-separated channels to build (empty = all)
         required: false
         default: ""
         type: string
-  schedule:
-    - cron: "0 0,12,18 * * *"
 
 permissions:
   contents: read
@@ -25,7 +20,6 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       any: ${{ steps.plan.outputs.any }}
-      publish: ${{ steps.plan.outputs.publish }}
     steps:
       - name: Determine channels to build
         id: plan
@@ -49,18 +43,7 @@ jobs:
                 artifact_prefix: "Emacs",
                 extra_configure: "",
               },
-              {
-                name: "igc",
-                branch: "feature/igc3",
-                build_dir: "emacs-igc",
-                tarball: "Emacs-igc.tar.xz",
-                artifact_prefix: "Emacs-igc",
-                extra_configure: "--with-mps",
-              },
             ];
-            const { owner, repo } = context.repo;
-            const testBuild = context.eventName === "workflow_dispatch"
-              && context.payload.inputs?.test_build === "true";
             const channelFilter = (context.payload.inputs?.channels ?? "")
               .split(",")
               .map((name) => name.trim())
@@ -84,31 +67,14 @@ jobs:
               if (!/^[0-9a-f]{40}$/.test(commitHash)) {
                 throw new Error(`Could not resolve ${channel.branch}: ${lsRemote.stdout}`);
               }
-              const tag = `${channel.name}-${commitHash.slice(0, 7)}`;
-              if (!testBuild) {
-                let exists = false;
-                try {
-                  await github.rest.repos.getReleaseByTag({ owner, repo, tag });
-                  exists = true;
-                } catch (error) {
-                  if (error.status !== 404) throw error;
-                }
-                if (exists) {
-                  core.info(`Release ${tag} already exists; skipping ${channel.name}.`);
-                  continue;
-                }
-              }
               include.push({
                 ...channel,
                 commit_hash: commitHash,
                 short_hash: commitHash.slice(0, 7),
-                tag,
               });
             }
             core.setOutput("matrix", JSON.stringify(include));
             core.setOutput("any", include.length > 0 ? "true" : "false");
-            const publish = !testBuild && context.ref === "refs/heads/main";
-            core.setOutput("publish", publish ? "true" : "false");
   deps:
     needs: plan
     if: needs.plan.outputs.any == 'true'
@@ -180,15 +146,12 @@ jobs:
     needs: [plan, deps]
     if: needs.plan.outputs.any == 'true'
     runs-on: macos-26
-    permissions:
-      contents: write
     strategy:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       DEPS_PREFIX: ${{ github.workspace }}/deps
-      RELEASE_RETENTION: "21"
       CFLAGS: -flto -g0 -O2
     steps:
       - name: Checkout build scripts
@@ -210,63 +173,17 @@ jobs:
       - name: Build Emacs
         env:
           EMACS_BRANCH: ${{ matrix.branch }}
+          EMACS_COMMIT: ${{ matrix.commit_hash }}
           BUILD_DIR: ${{ matrix.build_dir }}
           TARBALL: ${{ matrix.tarball }}
           EXTRA_CONFIGURE: ${{ matrix.extra_configure }}
         run: bash scripts/build-emacs.sh
       - name: Verify packaged app
         run: bash scripts/verify-app.sh '${{ matrix.build_dir }}/Emacs.app'
-      - name: Upload test artifact
-        if: needs.plan.outputs.publish != 'true'
+      - name: Upload fluent cursor build
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_prefix }}-${{ env.ARTIFACT_VERSION }}-${{ matrix.short_hash }}
+          name: ${{ matrix.artifact_prefix }}-fluent-cursor-${{ env.ARTIFACT_VERSION }}-${{ matrix.short_hash }}
           path: ${{ matrix.build_dir }}/${{ matrix.tarball }}
           if-no-files-found: error
           compression-level: 0
-      - name: Publish release
-        if: needs.plan.outputs.publish == 'true'
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ matrix.tag }}
-          name: Emacs ${{ matrix.name }} ${{ env.ARTIFACT_VERSION }} (${{ matrix.short_hash }})
-          body: |
-            Upstream: https://github.com/emacs-mirror/emacs/commit/${{ matrix.commit_hash }}
-            Branch: ${{ matrix.branch }}
-            Emacs version: ${{ env.ARTIFACT_VERSION }}
-          files: ${{ matrix.build_dir }}/${{ matrix.tarball }}
-      - name: Delete older releases for branch
-        if: needs.plan.outputs.publish == 'true'
-        uses: actions/github-script@v9
-        with:
-          script: |
-            // Match tags exactly (name plus 7-hex hash) so that a channel
-            // whose name prefixes another's can never have its retention
-            // delete the other channel's releases.
-            const tagPattern = new RegExp("^${{ matrix.name }}-[0-9a-f]{7}$");
-            const retentionCount = Number.parseInt(process.env.RELEASE_RETENTION, 10);
-            const { owner, repo } = context.repo;
-
-            if (!Number.isInteger(retentionCount) || retentionCount < 1) {
-              throw new Error(`Invalid release retention count: ${process.env.RELEASE_RETENTION}`);
-            }
-
-            const releases = await github.paginate(github.rest.repos.listReleases, {
-              owner,
-              repo,
-              per_page: 100,
-            });
-
-            const toDelete = releases
-              .filter((release) => tagPattern.test(release.tag_name))
-              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-              .slice(retentionCount);
-
-            for (const release of toDelete) {
-              core.info(`Deleting release ${release.tag_name} (id=${release.id})`);
-              await github.rest.repos.deleteRelease({
-                owner,
-                repo,
-                release_id: release.id,
-              });
-            }
