@@ -1,23 +1,30 @@
 -- Emacs Client AppleScript Application
 -- Handles opening files from Finder, drag-and-drop, Spotlight/Dock launch,
--- and org-protocol URLs by calling the launchd-managed Emacs daemon.
+-- and org-protocol URLs by calling the Emacs.app installed in /Applications.
 
+property emacsBinaryPath : "/Applications/Emacs.app/Contents/MacOS/Emacs"
 property emacsClientPath : "/Applications/Emacs.app/Contents/MacOS/bin/emacsclient"
 
 on open theDropped
 	repeat with oneDrop in theDropped
 		set dropPath to POSIX path of oneDrop
-		my runClientWithArguments(" " & quoted form of dropPath, true)
+		try
+			my runClientWithArguments(" " & quoted form of dropPath, true)
+		end try
 	end repeat
 end open
 
 on run
-	my runClientWithArguments("", true)
+	try
+		my runClientWithArguments("", true)
+	end try
 end run
 
 -- Handle URL open events, including org-protocol:// URLs registered in Info.plist.
 on «event GURLGURL» thisURL
-	my runClientWithArguments(" " & quoted form of thisURL, false)
+	try
+		my runClientWithArguments(" " & quoted form of thisURL, false)
+	end try
 end «event GURLGURL»
 
 on runClientWithArguments(clientArguments, createFrame)
@@ -25,6 +32,7 @@ on runClientWithArguments(clientArguments, createFrame)
 	if createFrame then set frameArgument to " -c"
 
 	set clientCommand to quoted form of emacsClientPath & frameArgument & " -n" & clientArguments
+	set daemonCommand to quoted form of emacsBinaryPath & " --daemon >/dev/null 2>&1"
 
-	do shell script clientCommand
+	do shell script clientCommand & " || (" & daemonCommand & " && " & clientCommand & ")"
 end runClientWithArguments
