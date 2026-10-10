@@ -207,6 +207,39 @@ jobs:
           path: ${{ env.DEPS_PREFIX }}
           key: ${{ needs.deps.outputs.cache-key }}
           fail-on-cache-miss: true
+      - name: Import signing certificate
+        env:
+          SIGNING_P12_BASE64: ${{ secrets.SIGNING_P12_BASE64 }}
+          SIGNING_P12_PASSWORD: ${{ secrets.SIGNING_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${SIGNING_P12_BASE64}" || -z "${SIGNING_P12_PASSWORD}" ]]; then
+            echo "SIGNING_P12_BASE64 and SIGNING_P12_PASSWORD must be set" >&2
+            exit 1
+          fi
+          keychain="${RUNNER_TEMP}/signing.keychain-db"
+          keychain_password=$(uuidgen)
+          security create-keychain -p "${keychain_password}" "${keychain}"
+          security set-keychain-settings "${keychain}"
+          security unlock-keychain -p "${keychain_password}" "${keychain}"
+          echo "${SIGNING_P12_BASE64}" | base64 -d > "${RUNNER_TEMP}/signing.p12"
+          security import "${RUNNER_TEMP}/signing.p12" -k "${keychain}" \
+            -P "${SIGNING_P12_PASSWORD}" -T /usr/bin/codesign
+          rm -f "${RUNNER_TEMP}/signing.p12"
+          security set-key-partition-list -S apple-tool:,apple: \
+            -s -k "${keychain_password}" "${keychain}" > /dev/null
+          security list-keychains -d user -s "${keychain}" \
+            $(security list-keychains -d user | tr -d '"')
+          # The self-signed certificate is untrusted, so look it up among all
+          # code-signing identities rather than only valid ones.
+          identity=$(security find-identity -p codesigning "${keychain}" \
+            | awk '/^ +1\)/ { print $2; exit }')
+          if [[ -z "${identity}" ]]; then
+            echo "No code-signing identity found in the imported certificate" >&2
+            exit 1
+          fi
+          echo "SIGNING_KEYCHAIN=${keychain}" >> "$GITHUB_ENV"
+          echo "SIGN_IDENTITY=${identity}" >> "$GITHUB_ENV"
       - name: Build Emacs
         env:
           EMACS_BRANCH: ${{ matrix.branch }}
@@ -215,7 +248,15 @@ jobs:
           EXTRA_CONFIGURE: ${{ matrix.extra_configure }}
         run: bash scripts/build-emacs.sh
       - name: Verify packaged app
-        run: bash scripts/verify-app.sh '${{ matrix.build_dir }}/Emacs.app'
+        run: |
+          bash scripts/verify-app.sh '${{ matrix.build_dir }}/Emacs.app'
+          for app in '${{ matrix.build_dir }}/Emacs.app' '${{ matrix.build_dir }}/Emacs Client.app'; do
+            codesign --verify --deep --strict "${app}"
+            codesign -d -r- "${app}" 2>&1 | grep -q 'certificate leaf' || {
+              echo "${app} is not signed with the stable identity" >&2
+              exit 1
+            }
+          done
       - name: Upload test artifact
         if: needs.plan.outputs.publish != 'true'
         uses: actions/upload-artifact@v4
@@ -235,6 +276,9 @@ jobs:
             Branch: ${{ matrix.branch }}
             Emacs version: ${{ env.ARTIFACT_VERSION }}
           files: ${{ matrix.build_dir }}/${{ matrix.tarball }}
+      - name: Delete signing keychain
+        if: always() && env.SIGNING_KEYCHAIN != ''
+        run: security delete-keychain "${SIGNING_KEYCHAIN}"
       - name: Delete older releases for branch
         if: needs.plan.outputs.publish == 'true'
         uses: actions/github-script@v9

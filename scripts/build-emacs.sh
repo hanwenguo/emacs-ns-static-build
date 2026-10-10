@@ -79,6 +79,8 @@ bash "${script_dir}/create-emacs-client-app.sh" \
   --emacs-app Emacs.app \
   --client-app "Emacs Client.app" \
   --version "${ARTIFACT_VERSION}"
-codesign --force --deep -s - Emacs.app
-codesign --force --deep -s - "Emacs Client.app"
+# Sign with a stable identity when one is provided so that TCC grants (e.g.
+# Full Disk Access) survive upgrades; fall back to ad-hoc for local builds.
+codesign --force --deep -s "${SIGN_IDENTITY:--}" Emacs.app
+codesign --force --deep -s "${SIGN_IDENTITY:--}" "Emacs Client.app"
 tar -Jcf "${TARBALL}" Emacs.app "Emacs Client.app"
